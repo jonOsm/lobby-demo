@@ -28,7 +28,7 @@ function App() {
   }, [isConnected, listLobbies]);
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -41,16 +41,6 @@ function App() {
                   {isConnected ? 'Connected' : 'Disconnected'}
                 </span>
               </div>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
             </div>
           </div>
         </div>
@@ -75,7 +65,7 @@ function App() {
       )}
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {currentLobby ? (
           // Show lobby room when in a lobby
           <div className="max-w-2xl mx-auto">
@@ -92,7 +82,6 @@ function App() {
             <div>
               <LobbyList
                 lobbies={lobbies}
-                username={username}
                 onJoinLobby={joinLobby}
                 onRefresh={listLobbies}
                 isLoading={!isConnected}

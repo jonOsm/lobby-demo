@@ -7,7 +7,7 @@ export interface UseWebSocketReturn {
   currentLobby: Lobby | null;
   username: string;
   error: string | null;
-  createLobby: (name: string, maxPlayers: number, isPublic: boolean) => void;
+  createLobby: (name: string, maxPlayers: number, isPublic: boolean, creatorUsername: string) => void;
   joinLobby: (lobbyId: string, username: string) => void;
   leaveLobby: (lobbyId: string, username: string) => void;
   setReady: (lobbyId: string, username: string, ready: boolean) => void;
@@ -30,13 +30,21 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     }
   }, []);
 
-  const createLobby = useCallback((name: string, maxPlayers: number, isPublic: boolean) => {
+  const createLobby = useCallback((name: string, maxPlayers: number, isPublic: boolean, creatorUsername: string) => {
     sendMessage({
       action: 'create_lobby',
       name,
       max_players: maxPlayers,
       public: isPublic,
     });
+    // After creating the lobby, automatically join it
+    setTimeout(() => {
+      sendMessage({
+        action: 'join_lobby',
+        lobby_id: name,
+        username: creatorUsername,
+      });
+    }, 100);
   }, [sendMessage]);
 
   const joinLobby = useCallback((lobbyId: string, username: string) => {
@@ -69,13 +77,14 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
   }, [sendMessage]);
 
   useEffect(() => {
+    console.log('Attempting to connect to WebSocket at:', url);
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
       setIsConnected(true);
       setError(null);
-      console.log('WebSocket connected');
+      console.log('WebSocket connected successfully');
     };
 
     ws.onmessage = (event) => {
@@ -119,6 +128,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
 
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
+      console.error('WebSocket readyState:', ws.readyState);
       setError('Connection error');
       setIsConnected(false);
     };

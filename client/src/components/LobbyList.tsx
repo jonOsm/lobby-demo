@@ -2,7 +2,6 @@ import React from 'react';
 
 interface LobbyListProps {
   lobbies: string[];
-  username: string;
   onJoinLobby: (lobbyId: string, username: string) => void;
   onRefresh: () => void;
   isLoading?: boolean;
@@ -10,17 +9,18 @@ interface LobbyListProps {
 
 export const LobbyList: React.FC<LobbyListProps> = ({
   lobbies,
-  username,
   onJoinLobby,
   onRefresh,
   isLoading = false,
 }) => {
   const [selectedLobby, setSelectedLobby] = React.useState<string>('');
+  const [username, setUsername] = React.useState('');
 
   const handleJoin = () => {
     if (selectedLobby && username.trim()) {
       onJoinLobby(selectedLobby, username.trim());
       setSelectedLobby('');
+      setUsername('');
     }
   };
 
@@ -79,10 +79,9 @@ export const LobbyList: React.FC<LobbyListProps> = ({
             <input
               type="text"
               value={username}
-              onChange={(e) => {/* Username is managed by parent component */}}
+              onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter your username"
               className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              readOnly
             />
             <button
               onClick={handleJoin}

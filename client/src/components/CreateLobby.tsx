@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface CreateLobbyProps {
-  onCreateLobby: (name: string, maxPlayers: number, isPublic: boolean) => void;
+  onCreateLobby: (name: string, maxPlayers: number, isPublic: boolean, creatorUsername: string) => void;
   isLoading?: boolean;
 }
 
@@ -10,14 +10,16 @@ export const CreateLobby: React.FC<CreateLobbyProps> = ({
   isLoading = false,
 }) => {
   const [name, setName] = React.useState('');
+  const [username, setUsername] = React.useState('');
   const [maxPlayers, setMaxPlayers] = React.useState(4);
   const [isPublic, setIsPublic] = React.useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim() && maxPlayers > 0) {
-      onCreateLobby(name.trim(), maxPlayers, isPublic);
+    if (name.trim() && username.trim() && maxPlayers > 0) {
+      onCreateLobby(name.trim(), maxPlayers, isPublic, username.trim());
       setName('');
+      setUsername('');
       setMaxPlayers(4);
       setIsPublic(true);
     }
@@ -28,6 +30,21 @@ export const CreateLobby: React.FC<CreateLobbyProps> = ({
       <h2 className="text-xl font-semibold text-gray-800 mb-4">Create New Lobby</h2>
       
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+            Your Username
+          </label>
+          <input
+            id="username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Enter your username"
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
         <div>
           <label htmlFor="lobby-name" className="block text-sm font-medium text-gray-700 mb-1">
             Lobby Name
@@ -77,7 +94,7 @@ export const CreateLobby: React.FC<CreateLobbyProps> = ({
 
         <button
           type="submit"
-          disabled={!name.trim() || isLoading}
+          disabled={!name.trim() || !username.trim() || isLoading}
           className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? 'Creating...' : 'Create Lobby'}

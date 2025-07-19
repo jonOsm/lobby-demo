@@ -10,7 +10,10 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		log.Printf("Origin check for: %s", r.Header.Get("Origin"))
+		return true
+	},
 }
 
 // Message types for client-server communication
@@ -73,12 +76,14 @@ func main() {
 	manager := lobby.NewLobbyManager()
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("WebSocket connection attempt from: %s", r.RemoteAddr)
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Println("Upgrade error:", err)
 			return
 		}
 		defer conn.Close()
+		log.Printf("WebSocket connection established with: %s", r.RemoteAddr)
 
 		for {
 			_, msg, err := conn.ReadMessage()
