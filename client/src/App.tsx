@@ -16,6 +16,7 @@ function App() {
     joinLobby,
     leaveLobby,
     setReady,
+    startGame,
     listLobbies,
     setUsername,
   } = useWebSocket();
@@ -74,6 +75,7 @@ function App() {
               currentUsername={username}
               onLeaveLobby={leaveLobby}
               onSetReady={setReady}
+              onStartGame={startGame}
             />
           </div>
         ) : (

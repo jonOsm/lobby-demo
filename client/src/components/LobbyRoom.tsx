@@ -6,6 +6,7 @@ interface LobbyRoomProps {
   currentUsername: string;
   onLeaveLobby: (lobbyId: string, username: string) => void;
   onSetReady: (lobbyId: string, username: string, ready: boolean) => void;
+  onStartGame: (lobbyId: string, username: string) => void;
 }
 
 export const LobbyRoom: React.FC<LobbyRoomProps> = ({
@@ -13,6 +14,7 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
   currentUsername,
   onLeaveLobby,
   onSetReady,
+  onStartGame,
 }) => {
   const currentPlayer = lobby.players.find(p => p.username === currentUsername);
   const allReady = lobby.players.length > 0 && lobby.players.every(p => p.ready);
@@ -25,6 +27,10 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
 
   const handleLeave = () => {
     onLeaveLobby(lobby.id, currentUsername);
+  };
+
+  const handleStartGame = () => {
+    onStartGame(lobby.id, currentUsername);
   };
 
   return (
@@ -113,11 +119,22 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
       )}
 
       {/* Game Start Status */}
-      {allReady && lobby.players.length >= 2 && (
+      {allReady && lobby.players.length >= 2 && lobby.state === 'waiting' && (
         <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
           <div className="flex items-center justify-center">
             <span className="text-green-800 font-medium">
               🎮 All players are ready! Game can start.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Game In Progress Status */}
+      {lobby.state === 'in_game' && (
+        <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+          <div className="flex items-center justify-center">
+            <span className="text-purple-800 font-medium">
+              🎮 Game is in progress!
             </span>
           </div>
         </div>
@@ -132,8 +149,11 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
           Leave Lobby
         </button>
         
-        {allReady && lobby.players.length >= 2 && (
-          <button className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
+        {allReady && lobby.players.length >= 2 && lobby.state === 'waiting' && (
+          <button 
+            onClick={handleStartGame}
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+          >
             Start Game
           </button>
         )}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 
@@ -47,6 +48,12 @@ type SetReadyRequest struct {
 
 type ListLobbiesRequest struct {
 	Action string `json:"action"`
+}
+
+type StartGameRequest struct {
+	Action   string `json:"action"`
+	LobbyID  string `json:"lobby_id"`
+	Username string `json:"username"` // Username of the player starting the game
 }
 
 type ErrorResponse struct {
@@ -173,6 +180,25 @@ func main() {
 					}
 				}
 				writeJSON(conn, lobbyStateResponseFromLobby(l))
+			case "start_game":
+				var req StartGameRequest
+				if err := json.Unmarshal(msg, &req); err != nil {
+					writeJSON(conn, ErrorResponse{"error", "invalid start_game message"})
+					continue
+				}
+				l, ok := manager.GetLobbyByID(lobby.LobbyID(req.LobbyID))
+				if !ok {
+					writeJSON(conn, ErrorResponse{"error", "lobby not found"})
+					continue
+				}
+				// Validate game can be started
+				if err := validateGameStart(l, req.Username); err != nil {
+					writeJSON(conn, ErrorResponse{"error", err.Error()})
+					continue
+				}
+				// Start the game
+				l.State = lobby.LobbyInGame
+				writeJSON(conn, lobbyStateResponseFromLobby(l))
 			default:
 				writeJSON(conn, ErrorResponse{"error", "unknown action"})
 			}
@@ -203,6 +229,39 @@ func lobbyStateResponseFromLobby(l *lobby.Lobby) LobbyStateResponse {
 		State:    lobbyStateString(l.State),
 		Metadata: l.Metadata,
 	}
+}
+
+func validateGameStart(l *lobby.Lobby, username string) error {
+	// Check if lobby is in waiting state
+	if l.State != lobby.LobbyWaiting {
+		return errors.New("lobby is not in waiting state")
+	}
+
+	// Check if there are enough players (minimum 2)
+	if len(l.Players) < 2 {
+		return errors.New("need at least 2 players to start the game")
+	}
+
+	// Check if all players are ready
+	for _, p := range l.Players {
+		if !p.Ready {
+			return errors.New("all players must be ready to start the game")
+		}
+	}
+
+	// Check if the requesting player is in the lobby
+	playerFound := false
+	for _, p := range l.Players {
+		if string(p.ID) == username {
+			playerFound = true
+			break
+		}
+	}
+	if !playerFound {
+		return errors.New("player not found in lobby")
+	}
+
+	return nil
 }
 
 func lobbyStateString(state lobby.LobbyState) string {

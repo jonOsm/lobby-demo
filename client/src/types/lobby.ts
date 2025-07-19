@@ -45,6 +45,12 @@ export interface ListLobbiesRequest {
   action: 'list_lobbies';
 }
 
+export interface StartGameRequest {
+  action: 'start_game';
+  lobby_id: string;
+  username: string;
+}
+
 // Response types
 export interface LobbyStateResponse {
   action: 'lobby_created' | 'lobby_state';
@@ -69,7 +75,8 @@ export type WebSocketMessage =
   | JoinLobbyRequest
   | LeaveLobbyRequest
   | SetReadyRequest
-  | ListLobbiesRequest;
+  | ListLobbiesRequest
+  | StartGameRequest;
 
 export type WebSocketResponse = 
   | LobbyStateResponse

@@ -11,6 +11,7 @@ export interface UseWebSocketReturn {
   joinLobby: (lobbyId: string, username: string) => void;
   leaveLobby: (lobbyId: string, username: string) => void;
   setReady: (lobbyId: string, username: string, ready: boolean) => void;
+  startGame: (lobbyId: string, username: string) => void;
   listLobbies: () => void;
   setUsername: (username: string) => void;
 }
@@ -69,6 +70,14 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
       lobby_id: lobbyId,
       username,
       ready,
+    });
+  }, [sendMessage]);
+
+  const startGame = useCallback((lobbyId: string, username: string) => {
+    sendMessage({
+      action: 'start_game',
+      lobby_id: lobbyId,
+      username,
     });
   }, [sendMessage]);
 
@@ -148,6 +157,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     joinLobby,
     leaveLobby,
     setReady,
+    startGame,
     listLobbies,
     setUsername,
   };
