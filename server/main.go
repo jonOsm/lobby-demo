@@ -308,8 +308,13 @@ type LobbyListResponse struct {
 func main() {
 	fmt.Println("Starting lobby demo server...")
 
-	manager := lobby.NewLobbyManager()
 	sessionManager := NewSessionManager()
+	manager := lobby.NewLobbyManagerWithEvents(&lobby.LobbyEvents{
+		OnLobbyStateChange: func(l *lobby.Lobby) {
+			// Broadcast the updated lobby state to all users in the lobby
+			sessionManager.BroadcastToLobby(string(l.ID), l, lobbyStateResponseFromLobby(l))
+		},
+	})
 
 	// Add a simple HTTP endpoint for testing
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
