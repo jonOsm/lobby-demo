@@ -321,6 +321,16 @@ func main() {
 					}
 					// Send to the leaving player
 					writeJSON(conn, lobbyStateResponse)
+					// Also send the updated lobby list to the client
+					lobbies := manager.ListLobbies()
+					ids := make([]string, 0, len(lobbies))
+					for _, l := range lobbies {
+						ids = append(ids, string(l.ID))
+					}
+					writeJSON(conn, LobbyListResponse{
+						Action:  "lobby_list",
+						Lobbies: ids,
+					})
 				} else {
 					// Lobby was deleted, send a response indicating the player is no longer in the lobby
 					lobbyStateResponse := LobbyStateResponse{
