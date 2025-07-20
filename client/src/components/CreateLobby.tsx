@@ -1,12 +1,16 @@
 import React from 'react';
 
 interface CreateLobbyProps {
-  onCreateLobby: (name: string, maxPlayers: number, isPublic: boolean, creatorUsername: string) => void;
+  onCreateLobby: (name: string, maxPlayers: number, isPublic: boolean) => void;
+  onRegisterUser: (username: string) => void;
+  isRegistered: boolean;
   isLoading?: boolean;
 }
 
 export const CreateLobby: React.FC<CreateLobbyProps> = ({
   onCreateLobby,
+  onRegisterUser,
+  isRegistered,
   isLoading = false,
 }) => {
   const [name, setName] = React.useState('');
@@ -14,37 +18,62 @@ export const CreateLobby: React.FC<CreateLobbyProps> = ({
   const [maxPlayers, setMaxPlayers] = React.useState(4);
   const [isPublic, setIsPublic] = React.useState(true);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim() && username.trim() && maxPlayers > 0) {
-      onCreateLobby(name.trim(), maxPlayers, isPublic, username.trim());
+    if (username.trim()) {
+      onRegisterUser(username.trim());
+    }
+  };
+
+  const handleCreateLobby = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name.trim() && maxPlayers > 0) {
+      onCreateLobby(name.trim(), maxPlayers, isPublic);
       setName('');
-      setUsername('');
       setMaxPlayers(4);
       setIsPublic(true);
     }
   };
 
+  if (!isRegistered) {
+    return (
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Register User</h2>
+        
+        <form onSubmit={handleRegister} className="space-y-4">
+          <div>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+              Your Username
+            </label>
+            <input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={!username.trim() || isLoading}
+            className="w-full px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Registering...' : 'Register User'}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-xl font-semibold text-gray-800 mb-4">Create New Lobby</h2>
+      <p className="text-sm text-gray-600 mb-4">Registered as: <span className="font-medium">{username}</span></p>
       
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-            Your Username
-          </label>
-          <input
-            id="username"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Enter your username"
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
+      <form onSubmit={handleCreateLobby} className="space-y-4">
         <div>
           <label htmlFor="lobby-name" className="block text-sm font-medium text-gray-700 mb-1">
             Lobby Name
@@ -94,7 +123,7 @@ export const CreateLobby: React.FC<CreateLobbyProps> = ({
 
         <button
           type="submit"
-          disabled={!name.trim() || !username.trim() || isLoading}
+          disabled={!name.trim() || isLoading}
           className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? 'Creating...' : 'Create Lobby'}

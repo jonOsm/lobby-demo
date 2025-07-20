@@ -3,6 +3,7 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { LobbyList } from './components/LobbyList';
 import { CreateLobby } from './components/CreateLobby';
 import { LobbyRoom } from './components/LobbyRoom';
+import { DebugPanel } from './components/DebugPanel';
 import './App.css';
 
 function App() {
@@ -10,15 +11,21 @@ function App() {
     isConnected,
     lobbies,
     currentLobby,
+    lobbyInfo,
     username,
+    userId,
     error,
+    isRegistered,
+    registerUser,
     createLobby,
     joinLobby,
     leaveLobby,
     setReady,
     startGame,
+    getLobbyInfo,
     listLobbies,
     setUsername,
+    isLeavingLobby,
   } = useWebSocket();
 
   // Load lobbies on connection
@@ -43,6 +50,13 @@ function App() {
                 </span>
               </div>
             </div>
+            {isRegistered && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">Logged in as:</span>
+                <span className="text-sm font-medium text-gray-800">{username}</span>
+                <span className="text-xs text-gray-500">({userId?.substring(0, 8)}...)</span>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -72,10 +86,11 @@ function App() {
           <div className="max-w-2xl mx-auto">
             <LobbyRoom
               lobby={currentLobby}
-              currentUsername={username}
+              currentUserId={userId}
               onLeaveLobby={leaveLobby}
               onSetReady={setReady}
               onStartGame={startGame}
+              isLeavingLobby={isLeavingLobby}
             />
           </div>
         ) : (
@@ -84,7 +99,10 @@ function App() {
             <div>
               <LobbyList
                 lobbies={lobbies}
+                lobbyInfo={lobbyInfo}
+                isRegistered={isRegistered}
                 onJoinLobby={joinLobby}
+                onGetLobbyInfo={getLobbyInfo}
                 onRefresh={listLobbies}
                 isLoading={!isConnected}
               />
@@ -92,6 +110,8 @@ function App() {
             <div>
               <CreateLobby
                 onCreateLobby={createLobby}
+                onRegisterUser={registerUser}
+                isRegistered={isRegistered}
                 isLoading={!isConnected}
               />
             </div>
@@ -107,6 +127,22 @@ function App() {
           </p>
         </div>
       </footer>
+      
+      {/* Debug Panel */}
+      <DebugPanel
+        isConnected={isConnected}
+        isRegistered={isRegistered}
+        userId={userId}
+        username={username}
+        currentLobby={currentLobby}
+        error={error}
+        onReRegister={() => {
+          const storedUsername = localStorage.getItem('lobby_username');
+          if (storedUsername) {
+            registerUser(storedUsername);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -3,34 +3,36 @@ import type { Lobby } from '../types/lobby';
 
 interface LobbyRoomProps {
   lobby: Lobby;
-  currentUsername: string;
-  onLeaveLobby: (lobbyId: string, username: string) => void;
-  onSetReady: (lobbyId: string, username: string, ready: boolean) => void;
-  onStartGame: (lobbyId: string, username: string) => void;
+  currentUserId: string | null;
+  onLeaveLobby: (lobbyId: string) => void;
+  onSetReady: (lobbyId: string, ready: boolean) => void;
+  onStartGame: (lobbyId: string) => void;
+  isLeavingLobby?: boolean;
 }
 
 export const LobbyRoom: React.FC<LobbyRoomProps> = ({
   lobby,
-  currentUsername,
+  currentUserId,
   onLeaveLobby,
   onSetReady,
   onStartGame,
+  isLeavingLobby = false,
 }) => {
-  const currentPlayer = lobby.players.find(p => p.username === currentUsername);
+  const currentPlayer = currentUserId ? lobby.players.find(p => p.user_id === currentUserId) : null;
   const allReady = lobby.players.length > 0 && lobby.players.every(p => p.ready);
 
   const handleReadyToggle = () => {
-    if (currentPlayer) {
-      onSetReady(lobby.id, currentUsername, !currentPlayer.ready);
+    if (currentPlayer && currentUserId) {
+      onSetReady(lobby.id, !currentPlayer.ready);
     }
   };
 
   const handleLeave = () => {
-    onLeaveLobby(lobby.id, currentUsername);
+    onLeaveLobby(lobby.id);
   };
 
   const handleStartGame = () => {
-    onStartGame(lobby.id, currentUsername);
+    onStartGame(lobby.id);
   };
 
   return (
@@ -62,7 +64,7 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
         <div className="space-y-2">
           {lobby.players.map((player) => (
             <div
-              key={player.username}
+              key={player.user_id}
               className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
             >
               <div className="flex items-center space-x-3">
@@ -73,7 +75,7 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
                 </div>
                 <span className="font-medium text-gray-800">
                   {player.username}
-                  {player.username === currentUsername && (
+                  {player.user_id === currentUserId && (
                     <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                       You
                     </span>
@@ -144,9 +146,14 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
       <div className="flex justify-between">
         <button
           onClick={handleLeave}
-          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+          disabled={isLeavingLobby}
+          className={`px-4 py-2 rounded ${
+            isLeavingLobby
+              ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+              : 'bg-red-500 text-white hover:bg-red-600'
+          }`}
         >
-          Leave Lobby
+          {isLeavingLobby ? 'Leaving...' : 'Leave Lobby'}
         </button>
         
         {allReady && lobby.players.length >= 2 && lobby.state === 'waiting' && (

@@ -5,13 +5,19 @@ export interface UseWebSocketReturn {
   isConnected: boolean;
   lobbies: string[];
   currentLobby: Lobby | null;
+  lobbyInfo: Lobby | null;
   username: string;
+  userId: string | null;
   error: string | null;
-  createLobby: (name: string, maxPlayers: number, isPublic: boolean, creatorUsername: string) => void;
-  joinLobby: (lobbyId: string, username: string) => void;
-  leaveLobby: (lobbyId: string, username: string) => void;
-  setReady: (lobbyId: string, username: string, ready: boolean) => void;
-  startGame: (lobbyId: string, username: string) => void;
+  isLeavingLobby: boolean;
+  isRegistered: boolean;
+  registerUser: (username: string) => void;
+  createLobby: (name: string, maxPlayers: number, isPublic: boolean) => void;
+  joinLobby: (lobbyId: string) => void;
+  leaveLobby: (lobbyId: string) => void;
+  setReady: (lobbyId: string, ready: boolean) => void;
+  startGame: (lobbyId: string) => void;
+  getLobbyInfo: (lobbyId: string) => void;
   listLobbies: () => void;
   setUsername: (username: string) => void;
 }
@@ -20,8 +26,41 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
   const [isConnected, setIsConnected] = useState(false);
   const [lobbies, setLobbies] = useState<string[]>([]);
   const [currentLobby, setCurrentLobby] = useState<Lobby | null>(null);
+  const [lobbyInfo, setLobbyInfo] = useState<Lobby | null>(null);
   const [username, setUsername] = useState('');
+  const [userId, setUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLeavingLobby, setIsLeavingLobby] = useState(false);
+  const [isRegistered, setIsRegistered] = useState(false);
+  
+  // Use ref to store current user ID for immediate access
+  const currentUserIdRef = useRef<string | null>(null);
+  
+  // Update ref when userId changes
+  useEffect(() => {
+    currentUserIdRef.current = userId;
+  }, [userId]);
+  
+  // Auto-reconnect and re-register if we have stored credentials
+  useEffect(() => {
+    if (isConnected && !isRegistered) {
+      const storedUsername = localStorage.getItem('lobby_username');
+      if (storedUsername) {
+        console.log('🔄 Auto-reconnecting with stored username:', storedUsername);
+        registerUser(storedUsername);
+      }
+    }
+  }, [isConnected, isRegistered]);
+  
+  // Clear error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
   
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -31,53 +70,89 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     }
   }, []);
 
-  const createLobby = useCallback((name: string, maxPlayers: number, isPublic: boolean, creatorUsername: string) => {
+  const registerUser = useCallback((username: string) => {
+    sendMessage({
+      action: 'register_user',
+      username,
+    });
+  }, [sendMessage]);
+
+  const createLobby = useCallback((name: string, maxPlayers: number, isPublic: boolean) => {
+    console.log('🔍 createLobby called with:', { name, maxPlayers, isPublic, userId, isRegistered });
+    if (!userId) {
+      console.log('❌ No user ID available');
+      setError('User not registered');
+      return;
+    }
+    console.log('✅ Sending create_lobby with user ID:', userId);
     sendMessage({
       action: 'create_lobby',
       name,
       max_players: maxPlayers,
       public: isPublic,
+      user_id: userId,
     });
-    // After creating the lobby, automatically join it
-    setTimeout(() => {
-      sendMessage({
-        action: 'join_lobby',
-        lobby_id: name,
-        username: creatorUsername,
-      });
-    }, 100);
-  }, [sendMessage]);
+  }, [sendMessage, userId]);
 
-  const joinLobby = useCallback((lobbyId: string, username: string) => {
+  const joinLobby = useCallback((lobbyId: string) => {
+    if (!userId) {
+      setError('User not registered');
+      return;
+    }
     sendMessage({
       action: 'join_lobby',
       lobby_id: lobbyId,
-      username,
+      user_id: userId,
     });
-  }, [sendMessage]);
+  }, [sendMessage, userId]);
 
-  const leaveLobby = useCallback((lobbyId: string, username: string) => {
+  const leaveLobby = useCallback((lobbyId: string) => {
+    if (!userId) {
+      setError('User not registered');
+      return;
+    }
+    // Prevent multiple leave requests
+    if (isLeavingLobby) {
+      return;
+    }
+    
+    setIsLeavingLobby(true);
     sendMessage({
       action: 'leave_lobby',
       lobby_id: lobbyId,
-      username,
+      user_id: userId,
     });
-  }, [sendMessage]);
+  }, [sendMessage, userId, isLeavingLobby]);
 
-  const setReady = useCallback((lobbyId: string, username: string, ready: boolean) => {
+  const setReady = useCallback((lobbyId: string, ready: boolean) => {
+    if (!userId) {
+      setError('User not registered');
+      return;
+    }
     sendMessage({
       action: 'set_ready',
       lobby_id: lobbyId,
-      username,
+      user_id: userId,
       ready,
     });
-  }, [sendMessage]);
+  }, [sendMessage, userId]);
 
-  const startGame = useCallback((lobbyId: string, username: string) => {
+  const startGame = useCallback((lobbyId: string) => {
+    if (!userId) {
+      setError('User not registered');
+      return;
+    }
     sendMessage({
       action: 'start_game',
       lobby_id: lobbyId,
-      username,
+      user_id: userId,
+    });
+  }, [sendMessage, userId]);
+
+  const getLobbyInfo = useCallback((lobbyId: string) => {
+    sendMessage({
+      action: 'get_lobby_info',
+      lobby_id: lobbyId,
     });
   }, [sendMessage]);
 
@@ -102,15 +177,47 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
         console.log('Received:', data);
 
         switch (data.action) {
-          case 'lobby_created':
+          case 'user_registered':
+            console.log('🎉 User registered successfully:', { userId: data.user_id, username: data.username });
+            setUserId(data.user_id);
+            setUsername(data.username);
+            setIsRegistered(true);
+            setError(null);
+            // Store username for auto-reconnect
+            localStorage.setItem('lobby_username', data.username);
+            break;
           case 'lobby_state':
-            setCurrentLobby({
+            // Reset leaving flag since we got a response
+            setIsLeavingLobby(false);
+            
+            // Check if the current player is still in the lobby
+            const currentPlayerInLobby = data.players.some(p => p.user_id === userId);
+            
+            if (!currentPlayerInLobby) {
+              // Player is no longer in the lobby, clear current lobby state
+              setCurrentLobby(null);
+            } else {
+              // Player is still in the lobby, update the lobby state
+              setCurrentLobby({
+                id: data.lobby_id,
+                name: data.lobby_id, // Using lobby_id as name for now
+                maxPlayers: 4, // Default, could be enhanced
+                players: data.players,
+                state: data.state as 'waiting' | 'in_game' | 'finished',
+                metadata: data.metadata,
+              });
+            }
+            setError(null);
+            break;
+
+          case 'lobby_info':
+            setLobbyInfo({
               id: data.lobby_id,
-              name: data.lobby_id, // Using lobby_id as name for now
-              maxPlayers: 4, // Default, could be enhanced
+              name: data.name,
+              maxPlayers: data.max_players,
               players: data.players,
               state: data.state as 'waiting' | 'in_game' | 'finished',
-              metadata: data.metadata,
+              metadata: {},
             });
             setError(null);
             break;
@@ -121,7 +228,14 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
             break;
 
           case 'error':
+            // Reset leaving flag since we got a response
+            setIsLeavingLobby(false);
+            
             setError(data.message);
+            // If the error is related to player not being in lobby or lobby not existing, clear the current lobby state
+            if (data.message === 'player not in lobby' || data.message === 'lobby does not exist') {
+              setCurrentLobby(null);
+            }
             break;
         }
       } catch (err) {
@@ -145,19 +259,25 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     return () => {
       ws.close();
     };
-  }, [url]);
+  }, [url, userId, username, sendMessage]);
 
   return {
     isConnected,
     lobbies,
     currentLobby,
+    lobbyInfo,
     username,
+    userId,
     error,
+    isLeavingLobby,
+    isRegistered,
+    registerUser,
     createLobby,
     joinLobby,
     leaveLobby,
     setReady,
     startGame,
+    getLobbyInfo,
     listLobbies,
     setUsername,
   };
