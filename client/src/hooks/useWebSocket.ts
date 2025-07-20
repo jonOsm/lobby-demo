@@ -41,17 +41,6 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     currentUserIdRef.current = userId;
   }, [userId]);
   
-  // Auto-reconnect and re-register if we have stored credentials
-  useEffect(() => {
-    if (isConnected && !isRegistered) {
-      const storedUsername = localStorage.getItem('lobby_username');
-      if (storedUsername) {
-        console.log('🔄 Auto-reconnecting with stored username:', storedUsername);
-        registerUser(storedUsername);
-      }
-    }
-  }, [isConnected, isRegistered]);
-  
   // Clear error after 5 seconds
   useEffect(() => {
     if (error) {
@@ -66,7 +55,10 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
 
   const sendMessage = useCallback((message: WebSocketMessage) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log('📤 Sending message:', message);
       wsRef.current.send(JSON.stringify(message));
+    } else {
+      console.log('❌ WebSocket not ready, message not sent:', message);
     }
   }, []);
 
@@ -76,6 +68,17 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
       username,
     });
   }, [sendMessage]);
+
+  // Auto-reconnect and re-register if we have stored credentials
+  useEffect(() => {
+    if (isConnected && !isRegistered) {
+      const storedUsername = localStorage.getItem('lobby_username');
+      if (storedUsername) {
+        console.log('🔄 Auto-reconnecting with stored username:', storedUsername);
+        registerUser(storedUsername);
+      }
+    }
+  }, [isConnected, isRegistered, registerUser]);
 
   const createLobby = useCallback((name: string, maxPlayers: number, isPublic: boolean) => {
     console.log('🔍 createLobby called with:', { name, maxPlayers, isPublic, userId, isRegistered });

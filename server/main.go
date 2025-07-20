@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -25,6 +26,7 @@ type UserSession struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
 	Conn     *websocket.Conn
+	Active   bool // Whether the session is currently connected
 }
 
 // SessionManager manages active user sessions
@@ -59,6 +61,25 @@ func (sm *SessionManager) CreateSession(username string, conn *websocket.Conn) *
 		ID:       userID,
 		Username: username,
 		Conn:     conn,
+		Active:   true,
+	}
+
+	sm.sessions[userID] = session
+	sm.connToID[conn] = userID
+
+	return session
+}
+
+// CreateSessionWithID creates a session with a specific user ID (for reconnection)
+func (sm *SessionManager) CreateSessionWithID(userID string, username string, conn *websocket.Conn) *UserSession {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	session := &UserSession{
+		ID:       userID,
+		Username: username,
+		Conn:     conn,
+		Active:   true,
 	}
 
 	sm.sessions[userID] = session
@@ -93,7 +114,12 @@ func (sm *SessionManager) RemoveSession(conn *websocket.Conn) {
 	defer sm.mu.Unlock()
 
 	if userID, exists := sm.connToID[conn]; exists {
-		delete(sm.sessions, userID)
+		if session, sessionExists := sm.sessions[userID]; sessionExists {
+			log.Printf("Marking session %s for user %s as inactive", session.ID, session.Username)
+			// Mark session as inactive instead of deleting it
+			session.Active = false
+			session.Conn = nil
+		}
 		delete(sm.connToID, conn)
 	}
 }
@@ -104,11 +130,69 @@ func (sm *SessionManager) IsUsernameTaken(username string) bool {
 	defer sm.mu.RUnlock()
 
 	for _, session := range sm.sessions {
-		if session.Username == username {
+		if session.Username == username && session.Active {
 			return true
 		}
 	}
 	return false
+}
+
+// GetSessionByUsername retrieves a session by username
+func (sm *SessionManager) GetSessionByUsername(username string) (*UserSession, bool) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	log.Printf("Looking for session with username: %s", username)
+	log.Printf("Total sessions: %d", len(sm.sessions))
+
+	for userID, session := range sm.sessions {
+		log.Printf("Session %s: username=%s, active=%v", userID, session.Username, session.Active)
+		if session.Username == username {
+			log.Printf("Found session for username %s: ID=%s, Active=%v", username, session.ID, session.Active)
+			return session, true
+		}
+	}
+
+	log.Printf("No session found for username: %s", username)
+	return nil, false
+}
+
+// ReconnectSession reconnects a user with the same username to their existing session
+func (sm *SessionManager) ReconnectSession(username string, conn *websocket.Conn) (*UserSession, bool) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	log.Printf("Attempting to reconnect user: %s", username)
+
+	// Find existing session with this username (including inactive ones)
+	for userID, session := range sm.sessions {
+		if session.Username == username {
+			log.Printf("Found session for username %s: ID=%s, Active=%v", username, session.ID, session.Active)
+
+			// Check if there's already an active connection for this username
+			if session.Active && session.Conn != nil {
+				log.Printf("Username %s is already active, cannot reconnect", username)
+				return nil, false
+			}
+
+			// Update the connection for the existing session
+			oldConn := session.Conn
+			session.Conn = conn
+			session.Active = true
+
+			// Update the connection mapping
+			if oldConn != nil {
+				delete(sm.connToID, oldConn)
+			}
+			sm.connToID[conn] = userID
+
+			log.Printf("Successfully reconnected user %s to session %s", username, session.ID)
+			return session, true
+		}
+	}
+
+	log.Printf("No session found for username: %s", username)
+	return nil, false
 }
 
 // Message types for client-server communication
@@ -202,8 +286,15 @@ type LobbyListResponse struct {
 }
 
 func main() {
+	fmt.Println("Starting lobby demo server...")
+
 	manager := lobby.NewLobbyManager()
 	sessionManager := NewSessionManager()
+
+	// Add a simple HTTP endpoint for testing
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Lobby Demo Server is running!")
+	})
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WebSocket connection attempt from: %s", r.RemoteAddr)
@@ -233,6 +324,8 @@ func main() {
 				continue
 			}
 
+			log.Printf("Received message with action: %s", base.Action)
+
 			switch base.Action {
 			case "register_user":
 				var req RegisterUserRequest
@@ -241,14 +334,33 @@ func main() {
 					continue
 				}
 
-				// Check if username is already taken
-				if sessionManager.IsUsernameTaken(req.Username) {
-					writeJSON(conn, ErrorResponse{"error", "username already taken"})
+				// Check if this username already has a session (active or inactive)
+				if existingSession, exists := sessionManager.GetSessionByUsername(req.Username); exists {
+					log.Printf("Found existing session for username %s: ID=%s, Active=%v", req.Username, existingSession.ID, existingSession.Active)
+
+					// Check if there's already an active connection for this username
+					if existingSession.Active && existingSession.Conn != nil {
+						log.Printf("Username %s is already active, cannot reconnect", req.Username)
+						writeJSON(conn, ErrorResponse{"error", "username already taken"})
+						continue
+					}
+
+					// Reconnect to existing session
+					log.Printf("Reconnecting user %s to existing session %s", req.Username, existingSession.ID)
+					session := sessionManager.CreateSessionWithID(existingSession.ID, req.Username, conn)
+					writeJSON(conn, RegisterUserResponse{
+						Action:   "user_registered",
+						UserID:   session.ID,
+						Username: session.Username,
+					})
 					continue
+				} else {
+					log.Printf("No existing session found for username %s, creating new session", req.Username)
 				}
 
 				// Create new session
 				session := sessionManager.CreateSession(req.Username, conn)
+				log.Printf("New user registered: %s with ID: %s", req.Username, session.ID)
 				writeJSON(conn, RegisterUserResponse{
 					Action:   "user_registered",
 					UserID:   session.ID,
@@ -415,6 +527,7 @@ func main() {
 				}
 				writeJSON(conn, lobbyInfoResponseFromLobby(l))
 			default:
+				log.Printf("Unknown action received: %s", base.Action)
 				writeJSON(conn, ErrorResponse{"error", "unknown action"})
 			}
 		}

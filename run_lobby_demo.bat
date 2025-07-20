@@ -1,9 +1,12 @@
 @echo off
 setlocal enabledelayedexpansion
 
+cls
+echo.
 echo ========================================
 echo Multiplayer Lobby Demo - Startup Script
 echo ========================================
+echo.
 
 :: Set colors for output
 set "GREEN=[92m"

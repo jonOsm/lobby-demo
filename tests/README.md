@@ -64,6 +64,7 @@ node test_username_uniqueness.js
 ### 🔧 Basic Connectivity
 - `simple_test.js` - Verifies server is running and responding
 - `test_simple.js` - Basic WebSocket communication
+- `test_user_registration_fix.js` - Tests user registration and auto-reconnect fixes
 
 ### 👤 User Management
 - `test_user_id_system.js` - User registration and ID assignment
