@@ -192,15 +192,14 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
           case 'lobby_state':
             // Reset leaving flag since we got a response
             setIsLeavingLobby(false);
-            
+            // Debug log for userId and players
+            console.log('DEBUG: userId:', userId, 'players:', data.players);
             // Check if the current player is still in the lobby
-            const currentPlayerInLobby = data.players.some(p => p.user_id === userId);
-            
+            const currentPlayerInLobby = data.players.some(p => p.user_id === currentUserIdRef.current);
             if (!currentPlayerInLobby) {
               // Player is no longer in the lobby, clear current lobby state
               setCurrentLobby(null);
             } else {
-              // Player is still in the lobby, update the lobby state
               setCurrentLobby({
                 id: data.lobby_id,
                 name: data.lobby_id, // Using lobby_id as name for now
@@ -209,10 +208,17 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
                 state: data.state as 'waiting' | 'in_game' | 'finished',
                 metadata: data.metadata,
               });
+              console.log('DEBUG: setCurrentLobby called with', {
+                id: data.lobby_id,
+                name: data.lobby_id,
+                maxPlayers: 4,
+                players: data.players,
+                state: data.state,
+                metadata: data.metadata,
+              });
             }
             setError(null);
             break;
-
           case 'lobby_info':
             setLobbyInfo({
               id: data.lobby_id,
@@ -224,16 +230,13 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
             });
             setError(null);
             break;
-
           case 'lobby_list':
             setLobbies(data.lobbies);
             setError(null);
             break;
-
           case 'error':
             // Reset leaving flag since we got a response
             setIsLeavingLobby(false);
-            
             setError(data.message);
             // If the error is related to player not being in lobby or lobby not existing, clear the current lobby state
             if (data.message === 'player not in lobby' || data.message === 'lobby does not exist') {
@@ -262,7 +265,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     return () => {
       ws.close();
     };
-  }, [url, userId, username, sendMessage]);
+  }, [url]);
 
   return {
     isConnected,
