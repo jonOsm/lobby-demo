@@ -128,12 +128,10 @@ func main() {
 	}
 
 	manager = lobby.NewLobbyManagerWithEvents(&lobby.LobbyEvents{
-		OnLobbyStateChange: func(l *lobby.Lobby) {
-			// Broadcast the updated lobby state to all users in the lobby
-			lobbyState := lobbyStateResponseFromLobby(l)
-			manager.BroadcastToLobby(l, lobbyState)
-		},
 		Broadcaster: broadcaster,
+		LobbyStateBuilder: func(l *lobby.Lobby) interface{} {
+			return lobbyStateResponseFromLobby(l)
+		},
 	})
 
 	// Add a simple HTTP endpoint for testing
@@ -255,10 +253,7 @@ func main() {
 				}
 
 				// Get the updated lobby state
-				l, _ := manager.GetLobbyByID(createdLobby.ID)
-				// Broadcast the updated lobby state to all users in the lobby (just the creator for now)
-				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				manager.BroadcastToLobby(l, lobbyStateResponse)
+				// Remove all calls to manager.BroadcastToLobby and any now-unused variables
 			case "list_lobbies":
 				lobbies := manager.ListLobbies()
 				ids := make([]string, 0, len(lobbies))
@@ -289,11 +284,7 @@ func main() {
 					writeJSON(conn, ErrorResponse{"error", err.Error()})
 					continue
 				}
-				l, _ := manager.GetLobbyByID(lobby.LobbyID(req.LobbyID))
-
-				// Broadcast the updated lobby state to all users in the lobby
-				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				manager.BroadcastToLobby(l, lobbyStateResponse)
+				// Remove all calls to manager.BroadcastToLobby and any now-unused variables
 			case "leave_lobby":
 				var req LeaveLobbyRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
@@ -314,11 +305,22 @@ func main() {
 					continue
 				}
 				// Check if lobby still exists (it might have been deleted if it became empty)
-				l, exists := manager.GetLobbyByID(lobby.LobbyID(req.LobbyID))
+				// Remove all calls to manager.BroadcastToLobby and any now-unused variables
+				exists = false
+				if _, ok := manager.GetLobbyByID(lobby.LobbyID(req.LobbyID)); ok {
+					exists = true
+				}
 				if exists {
-					// Broadcast the updated lobby state to remaining users
-					lobbyStateResponse := lobbyStateResponseFromLobby(l)
-					manager.BroadcastToLobby(l, lobbyStateResponse)
+					// Lobby was deleted, send a response indicating the player is no longer in the lobby
+					lobbyStateResponse := LobbyStateResponse{
+						Action:   "lobby_state",
+						LobbyID:  req.LobbyID,
+						Players:  []PlayerState{},
+						State:    "waiting",
+						Metadata: map[string]interface{}{},
+					}
+					// Send to the leaving player
+					writeJSON(conn, lobbyStateResponse)
 				} else {
 					// Lobby was deleted, send a response indicating the player is no longer in the lobby
 					lobbyStateResponse := LobbyStateResponse{
@@ -371,8 +373,7 @@ func main() {
 
 				log.Printf("Ready status updated successfully for user %s", session.Username)
 				// Broadcast the updated lobby state to all users in the lobby
-				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				manager.BroadcastToLobby(l, lobbyStateResponse)
+				// This line is removed as per the edit hint.
 			case "start_game":
 				var req StartGameRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
@@ -400,8 +401,7 @@ func main() {
 				// Start the game
 				l.State = lobby.LobbyInGame
 				// Broadcast the updated lobby state to all users in the lobby
-				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				manager.BroadcastToLobby(l, lobbyStateResponse)
+				// This line is removed as per the edit hint.
 			case "get_lobby_info":
 				var req GetLobbyInfoRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
