@@ -379,7 +379,11 @@ func main() {
 					continue
 				}
 				// Start the game
-				l.State = lobby.LobbyInGame
+				err := manager.SetLobbyState(lobby.LobbyID(req.LobbyID), lobby.LobbyInGame)
+				if err != nil {
+					writeJSON(conn, ErrorResponse{"error", err.Error()})
+					continue
+				}
 				// Broadcast the updated lobby state to all users in the lobby
 				// This line is removed as per the edit hint.
 			case "get_lobby_info":
