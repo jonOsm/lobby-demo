@@ -238,7 +238,7 @@ func main() {
 					continue
 				}
 
-				createdLobby, err := manager.CreateLobby(req.Name, req.MaxPlayers, req.Public, req.Metadata)
+				createdLobby, err := manager.CreateLobby(req.Name, req.MaxPlayers, req.Public, req.Metadata, session.ID)
 				if err != nil {
 					writeJSON(conn, ErrorResponse{"error", err.Error()})
 					continue
@@ -389,7 +389,7 @@ func main() {
 					continue
 				}
 				// Start the game
-				err := manager.SetLobbyState(lobby.LobbyID(req.LobbyID), lobby.LobbyInGame)
+				err := manager.StartGame(lobby.LobbyID(req.LobbyID), session.ID)
 				if err != nil {
 					writeJSON(conn, ErrorResponse{"error", err.Error()})
 					continue
