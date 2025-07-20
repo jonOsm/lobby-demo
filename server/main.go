@@ -111,30 +111,29 @@ type LobbyListResponse struct {
 // Add a map to associate WebSocket connections with user IDs
 var connToUserID = make(map[*websocket.Conn]string)
 
-// broadcastToLobby sends a message to all active connections in a lobby
-func broadcastToLobby(l *lobby.Lobby, sessionManager *lobby.SessionManager, message interface{}) {
-	for _, player := range l.Players {
-		userID := string(player.ID)
-		if session, exists := sessionManager.GetSessionByID(userID); exists && session.Active {
-			for conn, mappedUserID := range connToUserID {
-				if mappedUserID == userID {
-					writeJSON(conn, message)
-				}
-			}
-		}
-	}
-}
-
 func main() {
 	fmt.Println("Starting lobby demo server...")
 
 	sessionManager := lobby.NewSessionManager()
-	manager := lobby.NewLobbyManagerWithEvents(&lobby.LobbyEvents{
+
+	var manager *lobby.LobbyManager // Declare manager variable
+
+	// Register the broadcaster for the library
+	broadcaster := func(userID string, message interface{}) {
+		for conn, mappedUserID := range connToUserID {
+			if mappedUserID == userID {
+				writeJSON(conn, message)
+			}
+		}
+	}
+
+	manager = lobby.NewLobbyManagerWithEvents(&lobby.LobbyEvents{
 		OnLobbyStateChange: func(l *lobby.Lobby) {
 			// Broadcast the updated lobby state to all users in the lobby
 			lobbyState := lobbyStateResponseFromLobby(l)
-			broadcastToLobby(l, sessionManager, lobbyState)
+			manager.BroadcastToLobby(l, lobbyState)
 		},
+		Broadcaster: broadcaster,
 	})
 
 	// Add a simple HTTP endpoint for testing
@@ -259,7 +258,7 @@ func main() {
 				l, _ := manager.GetLobbyByID(createdLobby.ID)
 				// Broadcast the updated lobby state to all users in the lobby (just the creator for now)
 				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				broadcastToLobby(l, sessionManager, lobbyStateResponse)
+				manager.BroadcastToLobby(l, lobbyStateResponse)
 			case "list_lobbies":
 				lobbies := manager.ListLobbies()
 				ids := make([]string, 0, len(lobbies))
@@ -294,7 +293,7 @@ func main() {
 
 				// Broadcast the updated lobby state to all users in the lobby
 				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				broadcastToLobby(l, sessionManager, lobbyStateResponse)
+				manager.BroadcastToLobby(l, lobbyStateResponse)
 			case "leave_lobby":
 				var req LeaveLobbyRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
@@ -319,7 +318,7 @@ func main() {
 				if exists {
 					// Broadcast the updated lobby state to remaining users
 					lobbyStateResponse := lobbyStateResponseFromLobby(l)
-					broadcastToLobby(l, sessionManager, lobbyStateResponse)
+					manager.BroadcastToLobby(l, lobbyStateResponse)
 				} else {
 					// Lobby was deleted, send a response indicating the player is no longer in the lobby
 					lobbyStateResponse := LobbyStateResponse{
@@ -373,7 +372,7 @@ func main() {
 				log.Printf("Ready status updated successfully for user %s", session.Username)
 				// Broadcast the updated lobby state to all users in the lobby
 				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				broadcastToLobby(l, sessionManager, lobbyStateResponse)
+				manager.BroadcastToLobby(l, lobbyStateResponse)
 			case "start_game":
 				var req StartGameRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
@@ -402,7 +401,7 @@ func main() {
 				l.State = lobby.LobbyInGame
 				// Broadcast the updated lobby state to all users in the lobby
 				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				broadcastToLobby(l, sessionManager, lobbyStateResponse)
+				manager.BroadcastToLobby(l, lobbyStateResponse)
 			case "get_lobby_info":
 				var req GetLobbyInfoRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
