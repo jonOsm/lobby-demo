@@ -347,33 +347,13 @@ func main() {
 					continue
 				}
 
-				l, ok := manager.GetLobbyByID(lobby.LobbyID(req.LobbyID))
-				if !ok {
-					writeJSON(conn, ErrorResponse{"error", "lobby not found"})
+				// Use the library method to set ready status and broadcast
+				err := manager.SetPlayerReady(lobby.LobbyID(req.LobbyID), lobby.PlayerID(session.ID), req.Ready)
+				if err != nil {
+					log.Printf("SetPlayerReady error: %v", err)
+					writeJSON(conn, ErrorResponse{"error", err.Error()})
 					continue
 				}
-
-				log.Printf("Setting ready status for user %s (ID: %s) to %v in lobby %s", session.Username, session.ID, req.Ready, req.LobbyID)
-
-				playerFound := false
-				for _, p := range l.Players {
-					if string(p.ID) == session.ID {
-						log.Printf("Found player %s, setting ready status from %v to %v", p.Username, p.Ready, req.Ready)
-						p.Ready = req.Ready
-						playerFound = true
-						break
-					}
-				}
-
-				if !playerFound {
-					log.Printf("Player %s not found in lobby %s", session.Username, req.LobbyID)
-					writeJSON(conn, ErrorResponse{"error", "player not found in lobby"})
-					continue
-				}
-
-				log.Printf("Ready status updated successfully for user %s", session.Username)
-				// Broadcast the updated lobby state to all users in the lobby
-				// This line is removed as per the edit hint.
 			case "start_game":
 				var req StartGameRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
