@@ -194,7 +194,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
             setIsLeavingLobby(false);
             
             // Check if the current player is still in the lobby
-            const currentPlayerInLobby = data.players.some(p => p.user_id === userId);
+            const currentPlayerInLobby = data.players.some(p => p.user_id === currentUserIdRef.current);
             
             if (!currentPlayerInLobby) {
               // Player is no longer in the lobby, clear current lobby state
@@ -262,7 +262,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     return () => {
       ws.close();
     };
-  }, [url, userId, username, sendMessage]);
+  }, [url, sendMessage]);
 
   return {
     isConnected,

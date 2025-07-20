@@ -195,6 +195,26 @@ func (sm *SessionManager) ReconnectSession(username string, conn *websocket.Conn
 	return nil, false
 }
 
+// BroadcastToLobby sends a message to all users in a specific lobby
+func (sm *SessionManager) BroadcastToLobby(lobbyID string, lobby *lobby.Lobby, message interface{}) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	// Get all user IDs in the lobby
+	userIDs := make([]string, 0, len(lobby.Players))
+	for _, player := range lobby.Players {
+		userIDs = append(userIDs, string(player.ID))
+	}
+
+	// Send message to all users in the lobby
+	for _, userID := range userIDs {
+		if session, exists := sm.sessions[userID]; exists && session.Active && session.Conn != nil {
+			log.Printf("Broadcasting to user %s in lobby %s", session.Username, lobbyID)
+			writeJSON(session.Conn, message)
+		}
+	}
+}
+
 // Message types for client-server communication
 
 type RegisterUserRequest struct {
@@ -396,7 +416,9 @@ func main() {
 
 				// Get the updated lobby state
 				l, _ := manager.GetLobbyByID(createdLobby.ID)
-				writeJSON(conn, lobbyStateResponseFromLobby(l))
+				// Broadcast the updated lobby state to all users in the lobby (just the creator for now)
+				lobbyStateResponse := lobbyStateResponseFromLobby(l)
+				sessionManager.BroadcastToLobby(string(createdLobby.ID), l, lobbyStateResponse)
 			case "list_lobbies":
 				lobbies := manager.ListLobbies()
 				ids := make([]string, 0, len(lobbies))
@@ -428,7 +450,10 @@ func main() {
 					continue
 				}
 				l, _ := manager.GetLobbyByID(lobby.LobbyID(req.LobbyID))
-				writeJSON(conn, lobbyStateResponseFromLobby(l))
+
+				// Broadcast the updated lobby state to all users in the lobby
+				lobbyStateResponse := lobbyStateResponseFromLobby(l)
+				sessionManager.BroadcastToLobby(req.LobbyID, l, lobbyStateResponse)
 			case "leave_lobby":
 				var req LeaveLobbyRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
@@ -451,16 +476,20 @@ func main() {
 				// Check if lobby still exists (it might have been deleted if it became empty)
 				l, exists := manager.GetLobbyByID(lobby.LobbyID(req.LobbyID))
 				if exists {
-					writeJSON(conn, lobbyStateResponseFromLobby(l))
+					// Broadcast the updated lobby state to remaining users
+					lobbyStateResponse := lobbyStateResponseFromLobby(l)
+					sessionManager.BroadcastToLobby(req.LobbyID, l, lobbyStateResponse)
 				} else {
 					// Lobby was deleted, send a response indicating the player is no longer in the lobby
-					writeJSON(conn, LobbyStateResponse{
+					lobbyStateResponse := LobbyStateResponse{
 						Action:   "lobby_state",
 						LobbyID:  req.LobbyID,
 						Players:  []PlayerState{},
 						State:    "waiting",
 						Metadata: map[string]interface{}{},
-					})
+					}
+					// Send to the leaving player
+					writeJSON(conn, lobbyStateResponse)
 				}
 			case "set_ready":
 				var req SetReadyRequest
@@ -481,12 +510,29 @@ func main() {
 					writeJSON(conn, ErrorResponse{"error", "lobby not found"})
 					continue
 				}
+
+				log.Printf("Setting ready status for user %s (ID: %s) to %v in lobby %s", session.Username, session.ID, req.Ready, req.LobbyID)
+
+				playerFound := false
 				for _, p := range l.Players {
 					if string(p.ID) == session.ID {
+						log.Printf("Found player %s, setting ready status from %v to %v", p.Username, p.Ready, req.Ready)
 						p.Ready = req.Ready
+						playerFound = true
+						break
 					}
 				}
-				writeJSON(conn, lobbyStateResponseFromLobby(l))
+
+				if !playerFound {
+					log.Printf("Player %s not found in lobby %s", session.Username, req.LobbyID)
+					writeJSON(conn, ErrorResponse{"error", "player not found in lobby"})
+					continue
+				}
+
+				log.Printf("Ready status updated successfully for user %s", session.Username)
+				// Broadcast the updated lobby state to all users in the lobby
+				lobbyStateResponse := lobbyStateResponseFromLobby(l)
+				sessionManager.BroadcastToLobby(req.LobbyID, l, lobbyStateResponse)
 			case "start_game":
 				var req StartGameRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
@@ -513,7 +559,9 @@ func main() {
 				}
 				// Start the game
 				l.State = lobby.LobbyInGame
-				writeJSON(conn, lobbyStateResponseFromLobby(l))
+				// Broadcast the updated lobby state to all users in the lobby
+				lobbyStateResponse := lobbyStateResponseFromLobby(l)
+				sessionManager.BroadcastToLobby(req.LobbyID, l, lobbyStateResponse)
 			case "get_lobby_info":
 				var req GetLobbyInfoRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
@@ -581,19 +629,26 @@ func lobbyInfoResponseFromLobby(l *lobby.Lobby) LobbyInfoResponse {
 }
 
 func validateGameStart(l *lobby.Lobby, username string) error {
+	log.Printf("Validating game start for user %s in lobby %s", username, l.ID)
+
 	// Check if lobby is in waiting state
 	if l.State != lobby.LobbyWaiting {
+		log.Printf("Lobby is not in waiting state: %v", l.State)
 		return errors.New("lobby is not in waiting state")
 	}
 
 	// Check if there are enough players (minimum 2)
 	if len(l.Players) < 2 {
+		log.Printf("Not enough players: %d", len(l.Players))
 		return errors.New("need at least 2 players to start the game")
 	}
 
 	// Check if all players are ready
+	log.Printf("Checking ready status for %d players:", len(l.Players))
 	for _, p := range l.Players {
+		log.Printf("  Player %s (ID: %s): Ready=%v", p.Username, p.ID, p.Ready)
 		if !p.Ready {
+			log.Printf("Player %s is not ready", p.Username)
 			return errors.New("all players must be ready to start the game")
 		}
 	}
@@ -601,15 +656,18 @@ func validateGameStart(l *lobby.Lobby, username string) error {
 	// Check if the requesting player is in the lobby
 	playerFound := false
 	for _, p := range l.Players {
-		if string(p.ID) == username {
+		if p.Username == username {
 			playerFound = true
+			log.Printf("Requesting player %s found in lobby", username)
 			break
 		}
 	}
 	if !playerFound {
+		log.Printf("Requesting player %s not found in lobby", username)
 		return errors.New("player not found in lobby")
 	}
 
+	log.Printf("Game start validation passed for user %s", username)
 	return nil
 }
 
