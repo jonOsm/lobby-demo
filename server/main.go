@@ -1,14 +1,11 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"sync"
 
 	"github.com/gorilla/websocket"
 	lobby "github.com/jonosm/multiplayer-lobby"
@@ -21,201 +18,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// UserSession represents an active user session
-type UserSession struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Conn     *websocket.Conn
-	Active   bool // Whether the session is currently connected
-}
-
-// SessionManager manages active user sessions
-type SessionManager struct {
-	mu       sync.RWMutex
-	sessions map[string]*UserSession    // userID -> session
-	connToID map[*websocket.Conn]string // connection -> userID
-}
-
-// NewSessionManager creates a new session manager
-func NewSessionManager() *SessionManager {
-	return &SessionManager{
-		sessions: make(map[string]*UserSession),
-		connToID: make(map[*websocket.Conn]string),
-	}
-}
-
-// GenerateUserID creates a unique user ID
-func (sm *SessionManager) GenerateUserID() string {
-	bytes := make([]byte, 8)
-	rand.Read(bytes)
-	return hex.EncodeToString(bytes)
-}
-
-// CreateSession creates a new user session
-func (sm *SessionManager) CreateSession(username string, conn *websocket.Conn) *UserSession {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	userID := sm.GenerateUserID()
-	session := &UserSession{
-		ID:       userID,
-		Username: username,
-		Conn:     conn,
-		Active:   true,
-	}
-
-	sm.sessions[userID] = session
-	sm.connToID[conn] = userID
-
-	return session
-}
-
-// CreateSessionWithID creates a session with a specific user ID (for reconnection)
-func (sm *SessionManager) CreateSessionWithID(userID string, username string, conn *websocket.Conn) *UserSession {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	session := &UserSession{
-		ID:       userID,
-		Username: username,
-		Conn:     conn,
-		Active:   true,
-	}
-
-	sm.sessions[userID] = session
-	sm.connToID[conn] = userID
-
-	return session
-}
-
-// GetSessionByID retrieves a session by user ID
-func (sm *SessionManager) GetSessionByID(userID string) (*UserSession, bool) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	session, exists := sm.sessions[userID]
-	return session, exists
-}
-
-// GetSessionByConn retrieves a session by WebSocket connection
-func (sm *SessionManager) GetSessionByConn(conn *websocket.Conn) (*UserSession, bool) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	userID, exists := sm.connToID[conn]
-	if !exists {
-		return nil, false
-	}
-	session, exists := sm.sessions[userID]
-	return session, exists
-}
-
-// RemoveSession removes a user session
-func (sm *SessionManager) RemoveSession(conn *websocket.Conn) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	if userID, exists := sm.connToID[conn]; exists {
-		if session, sessionExists := sm.sessions[userID]; sessionExists {
-			log.Printf("Marking session %s for user %s as inactive", session.ID, session.Username)
-			// Mark session as inactive instead of deleting it
-			session.Active = false
-			session.Conn = nil
-		}
-		delete(sm.connToID, conn)
-	}
-}
-
-// IsUsernameTaken checks if a username is already in use
-func (sm *SessionManager) IsUsernameTaken(username string) bool {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	for _, session := range sm.sessions {
-		if session.Username == username && session.Active {
-			return true
-		}
-	}
-	return false
-}
-
-// GetSessionByUsername retrieves a session by username
-func (sm *SessionManager) GetSessionByUsername(username string) (*UserSession, bool) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	log.Printf("Looking for session with username: %s", username)
-	log.Printf("Total sessions: %d", len(sm.sessions))
-
-	for userID, session := range sm.sessions {
-		log.Printf("Session %s: username=%s, active=%v", userID, session.Username, session.Active)
-		if session.Username == username {
-			log.Printf("Found session for username %s: ID=%s, Active=%v", username, session.ID, session.Active)
-			return session, true
-		}
-	}
-
-	log.Printf("No session found for username: %s", username)
-	return nil, false
-}
-
-// ReconnectSession reconnects a user with the same username to their existing session
-func (sm *SessionManager) ReconnectSession(username string, conn *websocket.Conn) (*UserSession, bool) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	log.Printf("Attempting to reconnect user: %s", username)
-
-	// Find existing session with this username (including inactive ones)
-	for userID, session := range sm.sessions {
-		if session.Username == username {
-			log.Printf("Found session for username %s: ID=%s, Active=%v", username, session.ID, session.Active)
-
-			// Check if there's already an active connection for this username
-			if session.Active && session.Conn != nil {
-				log.Printf("Username %s is already active, cannot reconnect", username)
-				return nil, false
-			}
-
-			// Update the connection for the existing session
-			oldConn := session.Conn
-			session.Conn = conn
-			session.Active = true
-
-			// Update the connection mapping
-			if oldConn != nil {
-				delete(sm.connToID, oldConn)
-			}
-			sm.connToID[conn] = userID
-
-			log.Printf("Successfully reconnected user %s to session %s", username, session.ID)
-			return session, true
-		}
-	}
-
-	log.Printf("No session found for username: %s", username)
-	return nil, false
-}
-
-// BroadcastToLobby sends a message to all users in a specific lobby
-func (sm *SessionManager) BroadcastToLobby(lobbyID string, lobby *lobby.Lobby, message interface{}) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	// Get all user IDs in the lobby
-	userIDs := make([]string, 0, len(lobby.Players))
-	for _, player := range lobby.Players {
-		userIDs = append(userIDs, string(player.ID))
-	}
-
-	// Send message to all users in the lobby
-	for _, userID := range userIDs {
-		if session, exists := sm.sessions[userID]; exists && session.Active && session.Conn != nil {
-			log.Printf("Broadcasting to user %s in lobby %s", session.Username, lobbyID)
-			writeJSON(session.Conn, message)
-		}
-	}
-}
-
-// Message types for client-server communication
+// Restore type definitions
 
 type RegisterUserRequest struct {
 	Action   string `json:"action"`
@@ -263,7 +66,7 @@ type ListLobbiesRequest struct {
 type StartGameRequest struct {
 	Action  string `json:"action"`
 	LobbyID string `json:"lobby_id"`
-	UserID  string `json:"user_id"` // User ID of the player starting the game
+	UserID  string `json:"user_id"`
 }
 
 type GetLobbyInfoRequest struct {
@@ -305,14 +108,32 @@ type LobbyListResponse struct {
 	Lobbies []string `json:"lobbies"`
 }
 
+// Add a map to associate WebSocket connections with user IDs
+var connToUserID = make(map[*websocket.Conn]string)
+
+// broadcastToLobby sends a message to all active connections in a lobby
+func broadcastToLobby(l *lobby.Lobby, sessionManager *lobby.SessionManager, message interface{}) {
+	for _, player := range l.Players {
+		userID := string(player.ID)
+		if session, exists := sessionManager.GetSessionByID(userID); exists && session.Active {
+			for conn, mappedUserID := range connToUserID {
+				if mappedUserID == userID {
+					writeJSON(conn, message)
+				}
+			}
+		}
+	}
+}
+
 func main() {
 	fmt.Println("Starting lobby demo server...")
 
-	sessionManager := NewSessionManager()
+	sessionManager := lobby.NewSessionManager()
 	manager := lobby.NewLobbyManagerWithEvents(&lobby.LobbyEvents{
 		OnLobbyStateChange: func(l *lobby.Lobby) {
 			// Broadcast the updated lobby state to all users in the lobby
-			sessionManager.BroadcastToLobby(string(l.ID), l, lobbyStateResponseFromLobby(l))
+			lobbyState := lobbyStateResponseFromLobby(l)
+			broadcastToLobby(l, sessionManager, lobbyState)
 		},
 	})
 
@@ -329,7 +150,11 @@ func main() {
 			return
 		}
 		defer func() {
-			sessionManager.RemoveSession(conn)
+			// Remove session and connection mapping on close
+			if userID, exists := connToUserID[conn]; exists {
+				sessionManager.RemoveSession(userID)
+			}
+			delete(connToUserID, conn)
 			conn.Close()
 		}()
 		log.Printf("WebSocket connection established with: %s", r.RemoteAddr)
@@ -364,15 +189,25 @@ func main() {
 					log.Printf("Found existing session for username %s: ID=%s, Active=%v", req.Username, existingSession.ID, existingSession.Active)
 
 					// Check if there's already an active connection for this username
-					if existingSession.Active && existingSession.Conn != nil {
-						log.Printf("Username %s is already active, cannot reconnect", req.Username)
-						writeJSON(conn, ErrorResponse{"error", "username already taken"})
-						continue
+					if existingSession.Active {
+						userAlreadyConnected := false
+						for _, mappedUserID := range connToUserID {
+							if mappedUserID == existingSession.ID {
+								userAlreadyConnected = true
+								break
+							}
+						}
+						if userAlreadyConnected {
+							log.Printf("Username %s is already active, cannot reconnect", req.Username)
+							writeJSON(conn, ErrorResponse{"error", "username already taken"})
+							continue
+						}
 					}
 
 					// Reconnect to existing session
 					log.Printf("Reconnecting user %s to existing session %s", req.Username, existingSession.ID)
-					session := sessionManager.CreateSessionWithID(existingSession.ID, req.Username, conn)
+					session := sessionManager.CreateSessionWithID(existingSession.ID, req.Username)
+					connToUserID[conn] = session.ID
 					writeJSON(conn, RegisterUserResponse{
 						Action:   "user_registered",
 						UserID:   session.ID,
@@ -384,7 +219,8 @@ func main() {
 				}
 
 				// Create new session
-				session := sessionManager.CreateSession(req.Username, conn)
+				session := sessionManager.CreateSession(req.Username)
+				connToUserID[conn] = session.ID
 				log.Printf("New user registered: %s with ID: %s", req.Username, session.ID)
 				writeJSON(conn, RegisterUserResponse{
 					Action:   "user_registered",
@@ -423,7 +259,7 @@ func main() {
 				l, _ := manager.GetLobbyByID(createdLobby.ID)
 				// Broadcast the updated lobby state to all users in the lobby (just the creator for now)
 				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				sessionManager.BroadcastToLobby(string(createdLobby.ID), l, lobbyStateResponse)
+				broadcastToLobby(l, sessionManager, lobbyStateResponse)
 			case "list_lobbies":
 				lobbies := manager.ListLobbies()
 				ids := make([]string, 0, len(lobbies))
@@ -458,7 +294,7 @@ func main() {
 
 				// Broadcast the updated lobby state to all users in the lobby
 				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				sessionManager.BroadcastToLobby(req.LobbyID, l, lobbyStateResponse)
+				broadcastToLobby(l, sessionManager, lobbyStateResponse)
 			case "leave_lobby":
 				var req LeaveLobbyRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
@@ -483,7 +319,7 @@ func main() {
 				if exists {
 					// Broadcast the updated lobby state to remaining users
 					lobbyStateResponse := lobbyStateResponseFromLobby(l)
-					sessionManager.BroadcastToLobby(req.LobbyID, l, lobbyStateResponse)
+					broadcastToLobby(l, sessionManager, lobbyStateResponse)
 				} else {
 					// Lobby was deleted, send a response indicating the player is no longer in the lobby
 					lobbyStateResponse := LobbyStateResponse{
@@ -537,7 +373,7 @@ func main() {
 				log.Printf("Ready status updated successfully for user %s", session.Username)
 				// Broadcast the updated lobby state to all users in the lobby
 				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				sessionManager.BroadcastToLobby(req.LobbyID, l, lobbyStateResponse)
+				broadcastToLobby(l, sessionManager, lobbyStateResponse)
 			case "start_game":
 				var req StartGameRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
@@ -566,7 +402,7 @@ func main() {
 				l.State = lobby.LobbyInGame
 				// Broadcast the updated lobby state to all users in the lobby
 				lobbyStateResponse := lobbyStateResponseFromLobby(l)
-				sessionManager.BroadcastToLobby(req.LobbyID, l, lobbyStateResponse)
+				broadcastToLobby(l, sessionManager, lobbyStateResponse)
 			case "get_lobby_info":
 				var req GetLobbyInfoRequest
 				if err := json.Unmarshal(msg, &req); err != nil {
