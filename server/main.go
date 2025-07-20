@@ -98,9 +98,10 @@ type LobbyStateResponse struct {
 }
 
 type PlayerState struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-	Ready    bool   `json:"ready"`
+	UserID       string `json:"user_id"`
+	Username     string `json:"username"`
+	Ready        bool   `json:"ready"`
+	CanStartGame bool   `json:"can_start_game"`
 }
 
 type LobbyListResponse struct {
@@ -130,7 +131,7 @@ func main() {
 	manager = lobby.NewLobbyManagerWithEvents(&lobby.LobbyEvents{
 		Broadcaster: broadcaster,
 		LobbyStateBuilder: func(l *lobby.Lobby) interface{} {
-			return lobbyStateResponseFromLobby(l)
+			return lobbyStateResponseFromLobby(l, manager)
 		},
 	})
 
@@ -424,13 +425,21 @@ func writeJSON(conn *websocket.Conn, v interface{}) {
 	conn.WriteMessage(websocket.TextMessage, data)
 }
 
-func lobbyStateResponseFromLobby(l *lobby.Lobby) LobbyStateResponse {
+func lobbyStateResponseFromLobby(l *lobby.Lobby, manager *lobby.LobbyManager) LobbyStateResponse {
 	players := make([]PlayerState, 0, len(l.Players))
+	canStartGameFunc := manager.Events.CanStartGame
 	for _, p := range l.Players {
+		canStart := false
+		if canStartGameFunc != nil {
+			canStart = canStartGameFunc(l, string(p.ID))
+		} else {
+			canStart = (l.OwnerID == string(p.ID))
+		}
 		players = append(players, PlayerState{
-			UserID:   string(p.ID),
-			Username: p.Username,
-			Ready:    p.Ready,
+			UserID:       string(p.ID),
+			Username:     p.Username,
+			Ready:        p.Ready,
+			CanStartGame: canStart,
 		})
 	}
 	return LobbyStateResponse{

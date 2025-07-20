@@ -156,7 +156,7 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
           {isLeavingLobby ? 'Leaving...' : 'Leave Lobby'}
         </button>
         
-        {allReady && lobby.players.length >= 2 && lobby.state === 'waiting' && (
+        {allReady && lobby.players.length >= 2 && lobby.state === 'waiting' && currentPlayer?.can_start_game && (
           <button 
             onClick={handleStartGame}
             className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
