@@ -117,6 +117,43 @@ func main() {
 
 	sessionManager := lobby.NewSessionManager()
 
+	// Session event hooks
+	sessionManager.OnSessionCreated = func(session *lobby.UserSession) {
+		for conn, userID := range connToUserID {
+			if userID == session.ID {
+				writeJSON(conn, map[string]interface{}{
+					"event":    "session_created",
+					"user_id":  session.ID,
+					"username": session.Username,
+				})
+			}
+		}
+	}
+	sessionManager.OnSessionReconnected = func(session *lobby.UserSession) {
+		for conn, userID := range connToUserID {
+			if userID == session.ID {
+				writeJSON(conn, map[string]interface{}{
+					"event":    "session_reconnected",
+					"user_id":  session.ID,
+					"username": session.Username,
+				})
+			}
+		}
+	}
+	sessionManager.OnSessionRemoved = func(session *lobby.UserSession) {
+		for conn, userID := range connToUserID {
+			if userID == session.ID {
+				writeJSON(conn, map[string]interface{}{
+					"event":    "session_removed",
+					"user_id":  session.ID,
+					"username": session.Username,
+				})
+				// Optionally close the connection here if you want to force logout
+				// conn.Close()
+			}
+		}
+	}
+
 	var manager *lobby.LobbyManager // Declare manager variable
 
 	// Register the broadcaster for the library

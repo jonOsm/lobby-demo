@@ -98,6 +98,24 @@ export interface LobbyInfoResponse {
   public: boolean;
 }
 
+export interface SessionCreatedEvent {
+  event: 'session_created';
+  user_id: string;
+  username: string;
+}
+
+export interface SessionReconnectedEvent {
+  event: 'session_reconnected';
+  user_id: string;
+  username: string;
+}
+
+export interface SessionRemovedEvent {
+  event: 'session_removed';
+  user_id: string;
+  username: string;
+}
+
 export type WebSocketMessage = 
   | RegisterUserRequest
   | CreateLobbyRequest
@@ -113,4 +131,7 @@ export type WebSocketResponse =
   | LobbyStateResponse
   | LobbyListResponse
   | LobbyInfoResponse
-  | ErrorResponse; 
+  | ErrorResponse
+  | SessionCreatedEvent
+  | SessionReconnectedEvent
+  | SessionRemovedEvent; 

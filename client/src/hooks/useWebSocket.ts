@@ -179,70 +179,114 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
         const data: WebSocketResponse = JSON.parse(event.data);
         console.log('Received:', data);
 
-        switch (data.action) {
-          case 'user_registered':
-            console.log('🎉 User registered successfully:', { userId: data.user_id, username: data.username });
+        // Type guards for session events
+        function isSessionEvent(data: any): data is { event: string; user_id: string; username: string } {
+          return (
+            typeof data === 'object' &&
+            typeof data.event === 'string' &&
+            typeof data.user_id === 'string' &&
+            typeof data.username === 'string'
+          );
+        }
+
+        if (isSessionEvent(data)) {
+          if (data.event === 'session_created') {
+            console.log(`🎉 Session created for ${data.username}`);
             setUserId(data.user_id);
             setUsername(data.username);
             setIsRegistered(true);
             setError(null);
-            // Store username for auto-reconnect
             localStorage.setItem('lobby_username', data.username);
-            break;
-          case 'lobby_state':
-            // Reset leaving flag since we got a response
-            setIsLeavingLobby(false);
-            // Debug log for userId and players
-            console.log('DEBUG: userId:', userId, 'players:', data.players);
-            // Check if the current player is still in the lobby
-            const currentPlayerInLobby = data.players.some(p => p.user_id === currentUserIdRef.current);
-            if (!currentPlayerInLobby) {
-              // Player is no longer in the lobby, clear current lobby state
-              setCurrentLobby(null);
-            } else {
-              setCurrentLobby({
+          }
+          if (data.event === 'session_reconnected') {
+            console.log(`🔄 Reconnected as ${data.username}`);
+            setUserId(data.user_id);
+            setUsername(data.username);
+            setIsRegistered(true);
+            setError(null);
+          }
+          if (data.event === 'session_removed') {
+            console.log('🚪 Session removed, logging out.');
+            setUserId(null);
+            setUsername('');
+            setIsRegistered(false);
+            setError('You have been logged out.');
+            // TODO: redirectToLogin();
+          }
+          return; // Don't process further if it's a session event
+        }
+
+        // Type guard for action-based responses
+        function hasAction(data: any): data is { action: string } {
+          return typeof data === 'object' && typeof data.action === 'string';
+        }
+
+        if (hasAction(data)) {
+          switch (data.action) {
+            case 'user_registered':
+              console.log('🎉 User registered successfully:', { userId: data.user_id, username: data.username });
+              setUserId(data.user_id);
+              setUsername(data.username);
+              setIsRegistered(true);
+              setError(null);
+              // Store username for auto-reconnect
+              localStorage.setItem('lobby_username', data.username);
+              break;
+            case 'lobby_state':
+              // Reset leaving flag since we got a response
+              setIsLeavingLobby(false);
+              // Debug log for userId and players
+              console.log('DEBUG: userId:', userId, 'players:', (data as any).players);
+              // Check if the current player is still in the lobby
+              const currentPlayerInLobby = (data as any).players && (data as any).players.some((p: any) => p.user_id === currentUserIdRef.current);
+              if (!currentPlayerInLobby) {
+                // Player is no longer in the lobby, clear current lobby state
+                setCurrentLobby(null);
+              } else {
+                setCurrentLobby({
+                  id: data.lobby_id,
+                  name: data.lobby_id, // Using lobby_id as name for now
+                  maxPlayers: 4, // Default, could be enhanced
+                  players: (data as any).players,
+                  state: data.state as 'waiting' | 'in_game' | 'finished',
+                  metadata: data.metadata,
+                });
+                console.log('DEBUG: setCurrentLobby called with', {
+                  id: data.lobby_id,
+                  name: data.lobby_id,
+                  maxPlayers: 4,
+                  players: (data as any).players,
+                  state: data.state,
+                  metadata: data.metadata,
+                });
+              }
+              setError(null);
+              break;
+            case 'lobby_info':
+              setLobbyInfo({
                 id: data.lobby_id,
-                name: data.lobby_id, // Using lobby_id as name for now
-                maxPlayers: 4, // Default, could be enhanced
-                players: data.players,
+                name: data.name,
+                maxPlayers: data.max_players,
+                players: (data as any).players,
                 state: data.state as 'waiting' | 'in_game' | 'finished',
-                metadata: data.metadata,
+                metadata: {},
               });
-              console.log('DEBUG: setCurrentLobby called with', {
-                id: data.lobby_id,
-                name: data.lobby_id,
-                maxPlayers: 4,
-                players: data.players,
-                state: data.state,
-                metadata: data.metadata,
-              });
-            }
-            setError(null);
-            break;
-          case 'lobby_info':
-            setLobbyInfo({
-              id: data.lobby_id,
-              name: data.name,
-              maxPlayers: data.max_players,
-              players: data.players,
-              state: data.state as 'waiting' | 'in_game' | 'finished',
-              metadata: {},
-            });
-            setError(null);
-            break;
-          case 'lobby_list':
-            setLobbies(data.lobbies);
-            setError(null);
-            break;
-          case 'error':
-            // Reset leaving flag since we got a response
-            setIsLeavingLobby(false);
-            setError(data.message);
-            // If the error is related to player not being in lobby or lobby not existing, clear the current lobby state
-            if (data.message === 'player not in lobby' || data.message === 'lobby does not exist') {
-              setCurrentLobby(null);
-            }
-            break;
+              setError(null);
+              break;
+            case 'lobby_list':
+              setLobbies(data.lobbies);
+              setError(null);
+              break;
+            case 'error':
+              // Reset leaving flag since we got a response
+              setIsLeavingLobby(false);
+              setError(data.message);
+              // If the error is related to player not being in lobby or lobby not existing, clear the current lobby state
+              if (data.message === 'player not in lobby' || data.message === 'lobby does not exist') {
+                setCurrentLobby(null);
+              }
+              break;
+          }
         }
       } catch (err) {
         console.error('Failed to parse WebSocket message:', err);
