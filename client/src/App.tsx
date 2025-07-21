@@ -26,6 +26,7 @@ function App() {
     listLobbies,
     setUsername,
     isLeavingLobby,
+    logout,
   } = useWebSocket();
 
   // Load lobbies on connection
@@ -37,6 +38,16 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
+      {/* Logout button at top right */}
+      {isRegistered && (
+        <button
+          onClick={logout}
+          style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000 }}
+          className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded shadow"
+        >
+          Logout{username ? ` (${username})` : ''}
+        </button>
+      )}
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

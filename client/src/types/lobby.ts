@@ -63,6 +63,11 @@ export interface GetLobbyInfoRequest {
   lobby_id: string;
 }
 
+export interface LogoutRequest {
+  action: 'logout';
+  user_id: string;
+}
+
 // Response types
 export interface RegisterUserResponse {
   action: 'user_registered';
@@ -124,7 +129,8 @@ export type WebSocketMessage =
   | SetReadyRequest
   | ListLobbiesRequest
   | StartGameRequest
-  | GetLobbyInfoRequest;
+  | GetLobbyInfoRequest
+  | LogoutRequest;
 
 export type WebSocketResponse = 
   | RegisterUserResponse

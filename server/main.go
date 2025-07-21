@@ -141,6 +141,7 @@ func main() {
 		}
 	}
 	sessionManager.OnSessionRemoved = func(session *lobby.UserSession) {
+		log.Printf("OnSessionRemoved fired for user: %s (active: %v)", session.ID, session.Active)
 		for conn, userID := range connToUserID {
 			if userID == session.ID {
 				writeJSON(conn, map[string]interface{}{
@@ -185,11 +186,14 @@ func main() {
 			return
 		}
 		defer func() {
+			log.Printf("[DEFER] connToUserID before: %+v", connToUserID)
 			// Remove session and connection mapping on close
 			if userID, exists := connToUserID[conn]; exists {
+				log.Printf("[DEFER] Calling RemoveSession for userID: %s", userID)
 				sessionManager.RemoveSession(userID)
 			}
 			delete(connToUserID, conn)
+			log.Printf("[DEFER] connToUserID after: %+v", connToUserID)
 			conn.Close()
 		}()
 		log.Printf("WebSocket connection established with: %s", r.RemoteAddr)
@@ -431,6 +435,34 @@ func main() {
 					continue
 				}
 				writeJSON(conn, lobbyInfoResponseFromLobby(l))
+			case "logout":
+				var req struct {
+					Action string `json:"action"`
+					UserID string `json:"user_id"`
+				}
+				if err := json.Unmarshal(msg, &req); err != nil {
+					writeJSON(conn, ErrorResponse{"error", "invalid logout message"})
+					continue
+				}
+
+				log.Printf("[LOGOUT] connToUserID before: %+v", connToUserID)
+				// Remove user from any lobby they are in
+				for _, lobby := range manager.ListLobbies() {
+					for _, player := range lobby.Players {
+						if string(player.ID) == req.UserID {
+							_ = manager.LeaveLobby(lobby.ID, player.ID)
+							break
+						}
+					}
+				}
+
+				// Remove the session
+				log.Printf("[LOGOUT] Calling RemoveSession for userID: %s", req.UserID)
+				sessionManager.RemoveSession(req.UserID)
+				log.Printf("[LOGOUT] connToUserID after: %+v", connToUserID)
+
+				conn.Close()
+				continue
 			default:
 				log.Printf("Unknown action received: %s", base.Action)
 				writeJSON(conn, ErrorResponse{"error", "unknown action"})

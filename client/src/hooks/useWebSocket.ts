@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { toast } from 'react-toastify';
 import type { WebSocketMessage, WebSocketResponse, Lobby, Player } from '../types/lobby';
 
 export interface UseWebSocketReturn {
@@ -20,6 +21,7 @@ export interface UseWebSocketReturn {
   getLobbyInfo: (lobbyId: string) => void;
   listLobbies: () => void;
   setUsername: (username: string) => void;
+  logout: () => void;
 }
 
 export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSocketReturn {
@@ -163,8 +165,20 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     sendMessage({ action: 'list_lobbies' });
   }, [sendMessage]);
 
+  const logout = useCallback(() => {
+    if (!userId) return;
+    sendMessage({ action: 'logout', user_id: userId });
+    setUserId(null);
+    setUsername('');
+    setIsRegistered(false);
+    setCurrentLobby(null);
+    setLobbyInfo(null);
+    localStorage.removeItem('lobby_username');
+    // Do NOT show toast here; only show it in the session_removed event handler.
+  }, [sendMessage, userId]);
+
   useEffect(() => {
-    console.log('Attempting to connect to WebSocket at:', url);
+    console.log('Connecting to WebSocket...');
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
@@ -191,6 +205,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
 
         if (isSessionEvent(data)) {
           if (data.event === 'session_created') {
+            toast.success(`Welcome, ${data.username}!`);
             console.log(`🎉 Session created for ${data.username}`);
             setUserId(data.user_id);
             setUsername(data.username);
@@ -199,6 +214,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
             localStorage.setItem('lobby_username', data.username);
           }
           if (data.event === 'session_reconnected') {
+            toast.success(`Reconnected as ${data.username}`);
             console.log(`🔄 Reconnected as ${data.username}`);
             setUserId(data.user_id);
             setUsername(data.username);
@@ -206,11 +222,14 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
             setError(null);
           }
           if (data.event === 'session_removed') {
+            console.log('SESSION_REMOVED EVENT HANDLER FIRED');
+            console.trace('session_removed stack trace');
+            toast.error('You have been logged out.');
             console.log('🚪 Session removed, logging out.');
             setUserId(null);
             setUsername('');
             setIsRegistered(false);
-            setError('You have been logged out.');
+            // Do NOT setError here to avoid duplicate error bubble
             // TODO: redirectToLogin();
           }
           return; // Don't process further if it's a session event
@@ -330,5 +349,6 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     getLobbyInfo,
     listLobbies,
     setUsername,
+    logout,
   };
 } 
