@@ -183,28 +183,15 @@ func main() {
 				}
 
 				// Check if this username already has a session (active or inactive)
-				if existingSession, exists := sessionManager.GetSessionByUsername(req.Username); exists {
-					log.Printf("Found existing session for username %s: ID=%s, Active=%v", req.Username, existingSession.ID, existingSession.Active)
+				if sessionManager.IsUsernameTaken(req.Username) {
+					log.Printf("Username %s is already active, cannot reconnect", req.Username)
+					writeJSON(conn, ErrorResponse{"error", "username already taken"})
+					continue
+				}
 
-					// Check if there's already an active connection for this username
-					if existingSession.Active {
-						userAlreadyConnected := false
-						for _, mappedUserID := range connToUserID {
-							if mappedUserID == existingSession.ID {
-								userAlreadyConnected = true
-								break
-							}
-						}
-						if userAlreadyConnected {
-							log.Printf("Username %s is already active, cannot reconnect", req.Username)
-							writeJSON(conn, ErrorResponse{"error", "username already taken"})
-							continue
-						}
-					}
-
-					// Reconnect to existing session
-					log.Printf("Reconnecting user %s to existing session %s", req.Username, existingSession.ID)
-					session := sessionManager.CreateSessionWithID(existingSession.ID, req.Username)
+				// Try to reconnect if session exists but is inactive
+				if existingSession, exists := sessionManager.GetSessionByUsername(req.Username); exists && !existingSession.Active {
+					session, _ := sessionManager.ReconnectSession(req.Username)
 					connToUserID[conn] = session.ID
 					writeJSON(conn, RegisterUserResponse{
 						Action:   "user_registered",
@@ -212,8 +199,6 @@ func main() {
 						Username: session.Username,
 					})
 					continue
-				} else {
-					log.Printf("No existing session found for username %s, creating new session", req.Username)
 				}
 
 				// Create new session
@@ -234,8 +219,8 @@ func main() {
 
 				// Get user session
 				session, exists := sessionManager.GetSessionByID(req.UserID)
-				if !exists {
-					writeJSON(conn, ErrorResponse{"error", "user not found"})
+				if !exists || !session.Active {
+					writeJSON(conn, ErrorResponse{"error", "user not found or inactive"})
 					continue
 				}
 
@@ -274,8 +259,8 @@ func main() {
 
 				// Get user session
 				session, exists := sessionManager.GetSessionByID(req.UserID)
-				if !exists {
-					writeJSON(conn, ErrorResponse{"error", "user not found"})
+				if !exists || !session.Active {
+					writeJSON(conn, ErrorResponse{"error", "user not found or inactive"})
 					continue
 				}
 
@@ -295,8 +280,8 @@ func main() {
 
 				// Get user session
 				session, exists := sessionManager.GetSessionByID(req.UserID)
-				if !exists {
-					writeJSON(conn, ErrorResponse{"error", "user not found"})
+				if !exists || !session.Active {
+					writeJSON(conn, ErrorResponse{"error", "user not found or inactive"})
 					continue
 				}
 
@@ -353,8 +338,8 @@ func main() {
 
 				// Get user session
 				session, exists := sessionManager.GetSessionByID(req.UserID)
-				if !exists {
-					writeJSON(conn, ErrorResponse{"error", "user not found"})
+				if !exists || !session.Active {
+					writeJSON(conn, ErrorResponse{"error", "user not found or inactive"})
 					continue
 				}
 
@@ -374,8 +359,8 @@ func main() {
 
 				// Get user session
 				session, exists := sessionManager.GetSessionByID(req.UserID)
-				if !exists {
-					writeJSON(conn, ErrorResponse{"error", "user not found"})
+				if !exists || !session.Active {
+					writeJSON(conn, ErrorResponse{"error", "user not found or inactive"})
 					continue
 				}
 
