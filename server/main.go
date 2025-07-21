@@ -198,7 +198,7 @@ func main() {
 		}()
 		log.Printf("WebSocket connection established with: %s", r.RemoteAddr)
 
-		for {
+		for { //TODO: Is infinite loop problematic here? more event driven approach available?
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
 				log.Println("Read error:", err)
