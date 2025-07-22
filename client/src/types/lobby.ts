@@ -14,14 +14,12 @@ export interface Lobby {
   metadata?: Record<string, any>;
 }
 
-// WebSocket message types
-export interface RegisterUserRequest {
-  action: 'register_user';
+// Request payload types (without action field)
+export interface RegisterUserPayload {
   username: string;
 }
 
-export interface CreateLobbyRequest {
-  action: 'create_lobby';
+export interface CreateLobbyPayload {
   name: string;
   max_players: number;
   public: boolean;
@@ -29,43 +27,83 @@ export interface CreateLobbyRequest {
   metadata?: Record<string, any>;
 }
 
-export interface JoinLobbyRequest {
-  action: 'join_lobby';
+export interface JoinLobbyPayload {
   lobby_id: string;
   user_id: string;
 }
 
-export interface LeaveLobbyRequest {
-  action: 'leave_lobby';
+export interface LeaveLobbyPayload {
   lobby_id: string;
   user_id: string;
 }
 
-export interface SetReadyRequest {
-  action: 'set_ready';
+export interface SetReadyPayload {
   lobby_id: string;
   user_id: string;
   ready: boolean;
 }
 
+export interface ListLobbiesPayload {
+  // Empty payload
+}
+
+export interface StartGamePayload {
+  lobby_id: string;
+  user_id: string;
+}
+
+export interface GetLobbyInfoPayload {
+  lobby_id: string;
+}
+
+export interface LogoutPayload {
+  user_id: string;
+}
+
+// WebSocket message types with data wrapper
+export interface RegisterUserRequest {
+  action: 'register_user';
+  data: RegisterUserPayload;
+}
+
+export interface CreateLobbyRequest {
+  action: 'create_lobby';
+  data: CreateLobbyPayload;
+}
+
+export interface JoinLobbyRequest {
+  action: 'join_lobby';
+  data: JoinLobbyPayload;
+}
+
+export interface LeaveLobbyRequest {
+  action: 'leave_lobby';
+  data: LeaveLobbyPayload;
+}
+
+export interface SetReadyRequest {
+  action: 'set_ready';
+  data: SetReadyPayload;
+}
+
 export interface ListLobbiesRequest {
   action: 'list_lobbies';
+  data: ListLobbiesPayload;
 }
 
 export interface StartGameRequest {
   action: 'start_game';
-  lobby_id: string;
-  user_id: string;
+  data: StartGamePayload;
 }
 
 export interface GetLobbyInfoRequest {
   action: 'get_lobby_info';
-  lobby_id: string;
+  data: GetLobbyInfoPayload;
 }
 
 export interface LogoutRequest {
   action: 'logout';
-  user_id: string;
+  data: LogoutPayload;
 }
 
 // Response types

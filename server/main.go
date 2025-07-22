@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -18,150 +17,26 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// Restore type definitions
-
-type RegisterUserRequest struct {
-	Action   string `json:"action"`
-	Username string `json:"username"`
-}
-
-type RegisterUserResponse struct {
-	Action   string `json:"action"`
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-}
-
-type CreateLobbyRequest struct {
-	Action     string                 `json:"action"`
-	Name       string                 `json:"name"`
-	MaxPlayers int                    `json:"max_players"`
-	Public     bool                   `json:"public"`
-	UserID     string                 `json:"user_id"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
-}
-
-type JoinLobbyRequest struct {
-	Action  string `json:"action"`
-	LobbyID string `json:"lobby_id"`
-	UserID  string `json:"user_id"`
-}
-
-type LeaveLobbyRequest struct {
-	Action  string `json:"action"`
-	LobbyID string `json:"lobby_id"`
-	UserID  string `json:"user_id"`
-}
-
-type SetReadyRequest struct {
-	Action  string `json:"action"`
-	LobbyID string `json:"lobby_id"`
-	UserID  string `json:"user_id"`
-	Ready   bool   `json:"ready"`
-}
-
-type ListLobbiesRequest struct {
-	Action string `json:"action"`
-}
-
-type StartGameRequest struct {
-	Action  string `json:"action"`
-	LobbyID string `json:"lobby_id"`
-	UserID  string `json:"user_id"`
-}
-
-type GetLobbyInfoRequest struct {
-	Action  string `json:"action"`
-	LobbyID string `json:"lobby_id"`
-}
-
-type LobbyInfoResponse struct {
-	Action     string        `json:"action"`
-	LobbyID    string        `json:"lobby_id"`
-	Name       string        `json:"name"`
-	Players    []PlayerState `json:"players"`
-	State      string        `json:"state"`
-	MaxPlayers int           `json:"max_players"`
-	Public     bool          `json:"public"`
-}
-
-type ErrorResponse struct {
-	Action  string `json:"action"`
-	Message string `json:"message"`
-}
-
-type LobbyStateResponse struct {
-	Action   string                 `json:"action"`
-	LobbyID  string                 `json:"lobby_id"`
-	Players  []PlayerState          `json:"players"`
-	State    string                 `json:"state"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
-}
-
-type PlayerState struct {
-	UserID       string `json:"user_id"`
-	Username     string `json:"username"`
-	Ready        bool   `json:"ready"`
-	CanStartGame bool   `json:"can_start_game"`
-}
-
-type LobbyListResponse struct {
-	Action  string   `json:"action"`
-	Lobbies []string `json:"lobbies"`
-}
-
-// Add a map to associate WebSocket connections with user IDs
-var connToUserID = make(map[*websocket.Conn]string)
-
 func main() {
 	fmt.Println("Starting lobby demo server...")
 
 	sessionManager := lobby.NewSessionManager()
+	var manager *lobby.LobbyManager
 
-	// Session event hooks
-	sessionManager.OnSessionCreated = func(session *lobby.UserSession) {
-		for conn, userID := range connToUserID {
-			if userID == session.ID {
-				writeJSON(conn, map[string]interface{}{
-					"event":    "session_created",
-					"user_id":  session.ID,
-					"username": session.Username,
-				})
-			}
-		}
-	}
-	sessionManager.OnSessionReconnected = func(session *lobby.UserSession) {
-		for conn, userID := range connToUserID {
-			if userID == session.ID {
-				writeJSON(conn, map[string]interface{}{
-					"event":    "session_reconnected",
-					"user_id":  session.ID,
-					"username": session.Username,
-				})
-			}
-		}
-	}
-	sessionManager.OnSessionRemoved = func(session *lobby.UserSession) {
-		log.Printf("OnSessionRemoved fired for user: %s (active: %v)", session.ID, session.Active)
-		for conn, userID := range connToUserID {
-			if userID == session.ID {
-				writeJSON(conn, map[string]interface{}{
-					"event":    "session_removed",
-					"user_id":  session.ID,
-					"username": session.Username,
-				})
-				// Optionally close the connection here if you want to force logout
-				// conn.Close()
-			}
-		}
+	// Prepare handler dependencies
+	deps := &lobby.HandlerDeps{
+		SessionManager: sessionManager,
+		LobbyManager:   nil, // Will be set after manager creation
+		ConnToUserID:   make(map[interface{}]string),
 	}
 
-	var manager *lobby.LobbyManager // Declare manager variable
-
-	// Register the broadcaster for the library
 	broadcaster := func(userID string, message interface{}) {
-		for conn, mappedUserID := range connToUserID {
+		// Find the connection for this user and send the message
+		for conn, mappedUserID := range deps.ConnToUserID {
 			if mappedUserID == userID {
-				writeJSON(conn, message)
+				if wsConn, ok := conn.(*WebSocketConn); ok {
+					wsConn.WriteJSON(message)
+				}
 			}
 		}
 	}
@@ -173,11 +48,22 @@ func main() {
 		},
 	})
 
-	// Add a simple HTTP endpoint for testing
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Lobby Demo Server is running!")
-	})
+	// Update deps with the manager
+	deps.LobbyManager = manager
 
+	// Message router setup
+	router := lobby.NewMessageRouter()
+	router.Handle("register_user", lobby.RegisterUserHandler(deps))
+	router.Handle("create_lobby", lobby.CreateLobbyHandler(deps))
+	router.Handle("join_lobby", lobby.JoinLobbyHandler(deps))
+	router.Handle("leave_lobby", lobby.LeaveLobbyHandler(deps))
+	router.Handle("set_ready", lobby.SetReadyHandler(deps))
+	router.Handle("list_lobbies", lobby.ListLobbiesHandler(deps))
+	router.Handle("start_game", lobby.StartGameHandler(deps, validateGameStart))
+	router.Handle("get_lobby_info", lobby.GetLobbyInfoHandler(deps, toLibraryLobbyInfoResponse))
+	router.Handle("logout", lobby.LogoutHandler(deps))
+
+	// HTTP endpoint for WebSocket
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WebSocket connection attempt from: %s", r.RemoteAddr)
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -185,298 +71,60 @@ func main() {
 			log.Println("Upgrade error:", err)
 			return
 		}
+		wsConn := &WebSocketConn{conn: conn}
 		defer func() {
-			log.Printf("[DEFER] connToUserID before: %+v", connToUserID)
-			// Remove session and connection mapping on close
-			if userID, exists := connToUserID[conn]; exists {
-				log.Printf("[DEFER] Calling RemoveSession for userID: %s", userID)
+			if userID, exists := deps.ConnToUserID[wsConn]; exists {
 				sessionManager.RemoveSession(userID)
 			}
-			delete(connToUserID, conn)
-			log.Printf("[DEFER] connToUserID after: %+v", connToUserID)
+			delete(deps.ConnToUserID, wsConn)
 			conn.Close()
 		}()
-		log.Printf("WebSocket connection established with: %s", r.RemoteAddr)
-
-		for { //TODO: Is infinite loop problematic here? more event driven approach available?
+		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
 				log.Println("Read error:", err)
 				break
 			}
-
-			var base struct {
-				Action string `json:"action"`
-			}
-			if err := json.Unmarshal(msg, &base); err != nil {
-				log.Println("Invalid message format:", err)
-				continue
-			}
-
-			log.Printf("Received message with action: %s", base.Action)
-
-			switch base.Action {
-			case "register_user":
-				var req RegisterUserRequest
-				if err := json.Unmarshal(msg, &req); err != nil {
-					writeJSON(conn, ErrorResponse{"error", "invalid register_user message"})
-					continue
-				}
-
-				// Check if this username already has a session (active or inactive)
-				if sessionManager.IsUsernameTaken(req.Username) {
-					log.Printf("Username %s is already active, cannot reconnect", req.Username)
-					writeJSON(conn, ErrorResponse{"error", "username already taken"})
-					continue
-				}
-
-				// Try to reconnect if session exists but is inactive
-				if existingSession, exists := sessionManager.GetSessionByUsername(req.Username); exists && !existingSession.Active {
-					session, _ := sessionManager.ReconnectSession(req.Username)
-					connToUserID[conn] = session.ID
-					writeJSON(conn, RegisterUserResponse{
-						Action:   "user_registered",
-						UserID:   session.ID,
-						Username: session.Username,
-					})
-					continue
-				}
-
-				// Create new session
-				session := sessionManager.CreateSession(req.Username)
-				connToUserID[conn] = session.ID
-				log.Printf("New user registered: %s with ID: %s", req.Username, session.ID)
-				writeJSON(conn, RegisterUserResponse{
-					Action:   "user_registered",
-					UserID:   session.ID,
-					Username: session.Username,
-				})
-			case "create_lobby":
-				var req CreateLobbyRequest
-				if err := json.Unmarshal(msg, &req); err != nil {
-					writeJSON(conn, ErrorResponse{"error", "invalid create_lobby message"})
-					continue
-				}
-
-				// Get user session
-				session, exists := sessionManager.GetSessionByID(req.UserID)
-				if !exists || !session.Active {
-					writeJSON(conn, ErrorResponse{"error", "user not found or inactive"})
-					continue
-				}
-
-				createdLobby, err := manager.CreateLobby(req.Name, req.MaxPlayers, req.Public, req.Metadata, session.ID)
-				if err != nil {
-					writeJSON(conn, ErrorResponse{"error", err.Error()})
-					continue
-				}
-
-				// Automatically add the creator to the lobby
-				player := &lobby.Player{ID: lobby.PlayerID(session.ID), Username: session.Username}
-				err = manager.JoinLobby(createdLobby.ID, player)
-				if err != nil {
-					writeJSON(conn, ErrorResponse{"error", "failed to join creator to lobby: " + err.Error()})
-					continue
-				}
-
-				// Get the updated lobby state
-				// Remove all calls to manager.BroadcastToLobby and any now-unused variables
-			case "list_lobbies":
-				lobbies := manager.ListLobbies()
-				ids := make([]string, 0, len(lobbies))
-				for _, l := range lobbies {
-					ids = append(ids, string(l.ID))
-				}
-				writeJSON(conn, LobbyListResponse{
-					Action:  "lobby_list",
-					Lobbies: ids,
-				})
-			case "join_lobby":
-				var req JoinLobbyRequest
-				if err := json.Unmarshal(msg, &req); err != nil {
-					writeJSON(conn, ErrorResponse{"error", "invalid join_lobby message"})
-					continue
-				}
-
-				// Get user session
-				session, exists := sessionManager.GetSessionByID(req.UserID)
-				if !exists || !session.Active {
-					writeJSON(conn, ErrorResponse{"error", "user not found or inactive"})
-					continue
-				}
-
-				player := &lobby.Player{ID: lobby.PlayerID(session.ID), Username: session.Username}
-				err := manager.JoinLobby(lobby.LobbyID(req.LobbyID), player)
-				if err != nil {
-					writeJSON(conn, ErrorResponse{"error", err.Error()})
-					continue
-				}
-				// Remove all calls to manager.BroadcastToLobby and any now-unused variables
-			case "leave_lobby":
-				var req LeaveLobbyRequest
-				if err := json.Unmarshal(msg, &req); err != nil {
-					writeJSON(conn, ErrorResponse{"error", "invalid leave_lobby message"})
-					continue
-				}
-
-				// Get user session
-				session, exists := sessionManager.GetSessionByID(req.UserID)
-				if !exists || !session.Active {
-					writeJSON(conn, ErrorResponse{"error", "user not found or inactive"})
-					continue
-				}
-
-				err := manager.LeaveLobby(lobby.LobbyID(req.LobbyID), lobby.PlayerID(session.ID))
-				if err != nil {
-					writeJSON(conn, ErrorResponse{"error", err.Error()})
-					continue
-				}
-				// Check if lobby still exists (it might have been deleted if it became empty)
-				// Remove all calls to manager.BroadcastToLobby and any now-unused variables
-				exists = false
-				if _, ok := manager.GetLobbyByID(lobby.LobbyID(req.LobbyID)); ok {
-					exists = true
-				}
-				if exists {
-					// Lobby was deleted, send a response indicating the player is no longer in the lobby
-					lobbyStateResponse := LobbyStateResponse{
-						Action:   "lobby_state",
-						LobbyID:  req.LobbyID,
-						Players:  []PlayerState{},
-						State:    "waiting",
-						Metadata: map[string]interface{}{},
-					}
-					// Send to the leaving player
-					writeJSON(conn, lobbyStateResponse)
-					// Also send the updated lobby list to the client
-					lobbies := manager.ListLobbies()
-					ids := make([]string, 0, len(lobbies))
-					for _, l := range lobbies {
-						ids = append(ids, string(l.ID))
-					}
-					writeJSON(conn, LobbyListResponse{
-						Action:  "lobby_list",
-						Lobbies: ids,
-					})
-				} else {
-					// Lobby was deleted, send a response indicating the player is no longer in the lobby
-					lobbyStateResponse := LobbyStateResponse{
-						Action:   "lobby_state",
-						LobbyID:  req.LobbyID,
-						Players:  []PlayerState{},
-						State:    "waiting",
-						Metadata: map[string]interface{}{},
-					}
-					// Send to the leaving player
-					writeJSON(conn, lobbyStateResponse)
-				}
-			case "set_ready":
-				var req SetReadyRequest
-				if err := json.Unmarshal(msg, &req); err != nil {
-					writeJSON(conn, ErrorResponse{"error", "invalid set_ready message"})
-					continue
-				}
-
-				// Get user session
-				session, exists := sessionManager.GetSessionByID(req.UserID)
-				if !exists || !session.Active {
-					writeJSON(conn, ErrorResponse{"error", "user not found or inactive"})
-					continue
-				}
-
-				// Use the library method to set ready status and broadcast
-				err := manager.SetPlayerReady(lobby.LobbyID(req.LobbyID), lobby.PlayerID(session.ID), req.Ready)
-				if err != nil {
-					log.Printf("SetPlayerReady error: %v", err)
-					writeJSON(conn, ErrorResponse{"error", err.Error()})
-					continue
-				}
-			case "start_game":
-				var req StartGameRequest
-				if err := json.Unmarshal(msg, &req); err != nil {
-					writeJSON(conn, ErrorResponse{"error", "invalid start_game message"})
-					continue
-				}
-
-				// Get user session
-				session, exists := sessionManager.GetSessionByID(req.UserID)
-				if !exists || !session.Active {
-					writeJSON(conn, ErrorResponse{"error", "user not found or inactive"})
-					continue
-				}
-
-				l, ok := manager.GetLobbyByID(lobby.LobbyID(req.LobbyID))
-				if !ok {
-					writeJSON(conn, ErrorResponse{"error", "lobby not found"})
-					continue
-				}
-				// Validate game can be started
-				if err := validateGameStart(l, session.Username); err != nil {
-					writeJSON(conn, ErrorResponse{"error", err.Error()})
-					continue
-				}
-				// Start the game
-				err := manager.StartGame(lobby.LobbyID(req.LobbyID), session.ID)
-				if err != nil {
-					writeJSON(conn, ErrorResponse{"error", err.Error()})
-					continue
-				}
-				// Broadcast the updated lobby state to all users in the lobby
-				// This line is removed as per the edit hint.
-			case "get_lobby_info":
-				var req GetLobbyInfoRequest
-				if err := json.Unmarshal(msg, &req); err != nil {
-					writeJSON(conn, ErrorResponse{"error", "invalid get_lobby_info message"})
-					continue
-				}
-				l, ok := manager.GetLobbyByID(lobby.LobbyID(req.LobbyID))
-				if !ok {
-					writeJSON(conn, ErrorResponse{"error", "lobby not found"})
-					continue
-				}
-				writeJSON(conn, lobbyInfoResponseFromLobby(l))
-			case "logout":
-				var req struct {
-					Action string `json:"action"`
-					UserID string `json:"user_id"`
-				}
-				if err := json.Unmarshal(msg, &req); err != nil {
-					writeJSON(conn, ErrorResponse{"error", "invalid logout message"})
-					continue
-				}
-
-				log.Printf("[LOGOUT] connToUserID before: %+v", connToUserID)
-				// Remove user from any lobby they are in
-				for _, lobby := range manager.ListLobbies() {
-					for _, player := range lobby.Players {
-						if string(player.ID) == req.UserID {
-							_ = manager.LeaveLobby(lobby.ID, player.ID)
-							break
-						}
-					}
-				}
-
-				// Remove the session
-				log.Printf("[LOGOUT] Calling RemoveSession for userID: %s", req.UserID)
-				sessionManager.RemoveSession(req.UserID)
-				log.Printf("[LOGOUT] connToUserID after: %+v", connToUserID)
-
-				conn.Close()
-				continue
-			default:
-				log.Printf("Unknown action received: %s", base.Action)
-				writeJSON(conn, ErrorResponse{"error", "unknown action"})
+			err = router.Dispatch(wsConn, msg)
+			if err != nil {
+				log.Println("Dispatch error:", err)
 			}
 		}
+	})
+
+	// Add a simple HTTP endpoint for testing
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Lobby Demo Server is running!")
 	})
 
 	log.Println("Demo backend started on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func writeJSON(conn *websocket.Conn, v interface{}) {
-	data, _ := json.Marshal(v)
-	conn.WriteMessage(websocket.TextMessage, data)
+// Local types for response formatting (if still needed)
+type PlayerState struct {
+	UserID       string `json:"user_id"`
+	Username     string `json:"username"`
+	Ready        bool   `json:"ready"`
+	CanStartGame bool   `json:"can_start_game"`
+}
+
+type LobbyStateResponse struct {
+	Action   string                 `json:"action"`
+	LobbyID  string                 `json:"lobby_id"`
+	Players  []PlayerState          `json:"players"`
+	State    string                 `json:"state"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+}
+
+type LobbyInfoResponse struct {
+	Action     string        `json:"action"`
+	LobbyID    string        `json:"lobby_id"`
+	Name       string        `json:"name"`
+	Players    []PlayerState `json:"players"`
+	State      string        `json:"state"`
+	MaxPlayers int           `json:"max_players"`
+	Public     bool          `json:"public"`
 }
 
 func lobbyStateResponseFromLobby(l *lobby.Lobby, manager *lobby.LobbyManager) LobbyStateResponse {
@@ -522,6 +170,29 @@ func lobbyInfoResponseFromLobby(l *lobby.Lobby) LobbyInfoResponse {
 		State:      lobbyStateString(l.State),
 		MaxPlayers: l.MaxPlayers,
 		Public:     l.Public,
+	}
+}
+
+// Adapter to convert local LobbyInfoResponse to library type
+func toLibraryLobbyInfoResponse(l *lobby.Lobby) lobby.LobbyInfoResponse {
+	resp := lobbyInfoResponseFromLobby(l)
+	players := make([]lobby.PlayerState, len(resp.Players))
+	for i, p := range resp.Players {
+		players[i] = lobby.PlayerState{
+			UserID:       p.UserID,
+			Username:     p.Username,
+			Ready:        p.Ready,
+			CanStartGame: p.CanStartGame,
+		}
+	}
+	return lobby.LobbyInfoResponse{
+		Action:     resp.Action,
+		LobbyID:    resp.LobbyID,
+		Name:       resp.Name,
+		Players:    players,
+		State:      resp.State,
+		MaxPlayers: resp.MaxPlayers,
+		Public:     resp.Public,
 	}
 }
 

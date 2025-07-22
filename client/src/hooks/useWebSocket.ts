@@ -67,7 +67,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
   const registerUser = useCallback((username: string) => {
     sendMessage({
       action: 'register_user',
-      username,
+      data: { username },
     });
   }, [sendMessage]);
 
@@ -92,10 +92,12 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     console.log('✅ Sending create_lobby with user ID:', userId);
     sendMessage({
       action: 'create_lobby',
-      name,
-      max_players: maxPlayers,
-      public: isPublic,
-      user_id: userId,
+      data: {
+        name,
+        max_players: maxPlayers,
+        public: isPublic,
+        user_id: userId,
+      },
     });
   }, [sendMessage, userId]);
 
@@ -106,8 +108,10 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     }
     sendMessage({
       action: 'join_lobby',
-      lobby_id: lobbyId,
-      user_id: userId,
+      data: {
+        lobby_id: lobbyId,
+        user_id: userId,
+      },
     });
   }, [sendMessage, userId]);
 
@@ -124,8 +128,10 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     setIsLeavingLobby(true);
     sendMessage({
       action: 'leave_lobby',
-      lobby_id: lobbyId,
-      user_id: userId,
+      data: {
+        lobby_id: lobbyId,
+        user_id: userId,
+      },
     });
   }, [sendMessage, userId, isLeavingLobby]);
 
@@ -136,9 +142,11 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     }
     sendMessage({
       action: 'set_ready',
-      lobby_id: lobbyId,
-      user_id: userId,
-      ready,
+      data: {
+        lobby_id: lobbyId,
+        user_id: userId,
+        ready,
+      },
     });
   }, [sendMessage, userId]);
 
@@ -149,25 +157,35 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     }
     sendMessage({
       action: 'start_game',
-      lobby_id: lobbyId,
-      user_id: userId,
+      data: {
+        lobby_id: lobbyId,
+        user_id: userId,
+      },
     });
   }, [sendMessage, userId]);
 
   const getLobbyInfo = useCallback((lobbyId: string) => {
     sendMessage({
       action: 'get_lobby_info',
-      lobby_id: lobbyId,
+      data: {
+        lobby_id: lobbyId,
+      },
     });
   }, [sendMessage]);
 
   const listLobbies = useCallback(() => {
-    sendMessage({ action: 'list_lobbies' });
+    sendMessage({ 
+      action: 'list_lobbies',
+      data: {},
+    });
   }, [sendMessage]);
 
   const logout = useCallback(() => {
     if (!userId) return;
-    sendMessage({ action: 'logout', user_id: userId });
+    sendMessage({ 
+      action: 'logout', 
+      data: { user_id: userId },
+    });
     setUserId(null);
     setUsername('');
     setIsRegistered(false);
