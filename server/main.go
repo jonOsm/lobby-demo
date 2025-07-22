@@ -73,18 +73,18 @@ func main() {
 
 	// Message router setup
 	router := lobby.NewMessageRouter()
-	router.Handle("register_user", lobby.RegisterUserHandler(deps))
-	router.Handle("create_lobby", lobby.CreateLobbyHandler(deps))
-	router.Handle("join_lobby", lobby.JoinLobbyHandler(deps))
-	router.Handle("leave_lobby", lobby.LeaveLobbyHandler(deps))
-	router.Handle("set_ready", lobby.SetReadyHandler(deps))
-	router.Handle("list_lobbies", lobby.ListLobbiesHandler(deps))
-	router.Handle("start_game", lobby.StartGameHandler(deps, validateGameStart))
-	router.Handle("get_lobby_info", lobby.GetLobbyInfoHandler(deps, func(l *lobby.Lobby) lobby.LobbyInfoResponse {
+	router.Handle(lobby.ActionRegisterUser, lobby.RegisterUserHandler(deps))
+	router.Handle(lobby.ActionCreateLobby, lobby.CreateLobbyHandler(deps))
+	router.Handle(lobby.ActionJoinLobby, lobby.JoinLobbyHandler(deps))
+	router.Handle(lobby.ActionLeaveLobby, lobby.LeaveLobbyHandler(deps))
+	router.Handle(lobby.ActionSetReady, lobby.SetReadyHandler(deps))
+	router.Handle(lobby.ActionListLobbies, lobby.ListLobbiesHandler(deps))
+	router.Handle(lobby.ActionStartGame, lobby.StartGameHandler(deps, validateGameStart))
+	router.Handle(lobby.ActionGetLobbyInfo, lobby.GetLobbyInfoHandler(deps, func(l *lobby.Lobby) lobby.LobbyInfoResponse {
 		responseBuilder := lobby.NewResponseBuilder(manager)
 		return responseBuilder.BuildLobbyInfoResponse(l)
 	}))
-	router.Handle("logout", lobby.LogoutHandler(deps))
+	router.Handle(lobby.ActionLogout, lobby.LogoutHandler(deps))
 
 	// HTTP endpoint for WebSocket
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
