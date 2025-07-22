@@ -71,20 +71,12 @@ func main() {
 		}
 	}()
 
-	// Message router setup
+	// Message router setup - simplified with automatic handler registration
 	router := lobby.NewMessageRouter()
-	router.Handle(lobby.ActionRegisterUser, lobby.RegisterUserHandler(deps))
-	router.Handle(lobby.ActionCreateLobby, lobby.CreateLobbyHandler(deps))
-	router.Handle(lobby.ActionJoinLobby, lobby.JoinLobbyHandler(deps))
-	router.Handle(lobby.ActionLeaveLobby, lobby.LeaveLobbyHandler(deps))
-	router.Handle(lobby.ActionSetReady, lobby.SetReadyHandler(deps))
-	router.Handle(lobby.ActionListLobbies, lobby.ListLobbiesHandler(deps))
-	router.Handle(lobby.ActionStartGame, lobby.StartGameHandler(deps, validateGameStart))
-	router.Handle(lobby.ActionGetLobbyInfo, lobby.GetLobbyInfoHandler(deps, func(l *lobby.Lobby) lobby.LobbyInfoResponse {
-		responseBuilder := lobby.NewResponseBuilder(manager)
-		return responseBuilder.BuildLobbyInfoResponse(l)
-	}))
-	router.Handle(lobby.ActionLogout, lobby.LogoutHandler(deps))
+	router.SetupDefaultHandlersWithCustom(deps, &lobby.HandlerOptions{
+		GameStartValidator: validateGameStart,
+		ResponseBuilder:    lobby.NewResponseBuilder(manager),
+	})
 
 	// HTTP endpoint for WebSocket
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
