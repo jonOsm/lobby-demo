@@ -144,6 +144,12 @@ export interface LobbyInfoResponse {
   public: boolean;
 }
 
+export interface LobbyLeftResponse {
+  action: 'lobby_left';
+  lobby_id: string;
+  user_id: string;
+}
+
 export interface SessionCreatedEvent {
   event: 'session_created';
   user_id: string;
@@ -178,6 +184,7 @@ export type WebSocketResponse =
   | LobbyStateResponse
   | LobbyListResponse
   | LobbyInfoResponse
+  | LobbyLeftResponse
   | ErrorResponse
   | SessionCreatedEvent
   | SessionReconnectedEvent

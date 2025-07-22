@@ -268,6 +268,16 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
               // Store username for auto-reconnect
               localStorage.setItem('lobby_username', data.username);
               break;
+            case 'lobby_left':
+              // Reset leaving flag since we got a response
+              setIsLeavingLobby(false);
+              // Clear current lobby state to return to lobby list
+              console.log('🚪 Successfully left lobby:', data.lobby_id);
+              setCurrentLobby(null);
+              setError(null);
+              // Refresh lobby list
+              listLobbies();
+              break;
             case 'lobby_state':
               // Reset leaving flag since we got a response
               setIsLeavingLobby(false);
