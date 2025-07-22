@@ -318,9 +318,29 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
               // Reset leaving flag since we got a response
               setIsLeavingLobby(false);
               setError(data.message);
-              // If the error is related to player not being in lobby or lobby not existing, clear the current lobby state
-              if (data.message === 'player not in lobby' || data.message === 'lobby does not exist') {
-                setCurrentLobby(null);
+              // Log error details for debugging
+              if (data.details) {
+                console.log('Error details:', data.details);
+              }
+              // Handle specific error codes
+              switch (data.code) {
+                case 'USER_NOT_FOUND':
+                case 'USER_INACTIVE':
+                  // User session issues - could trigger re-registration
+                  console.log('User session issue:', data.code);
+                  break;
+                case 'LOBBY_NOT_FOUND':
+                case 'PLAYER_NOT_IN_LOBBY':
+                  // Lobby/player issues - clear current lobby state
+                  setCurrentLobby(null);
+                  break;
+                case 'USERNAME_TAKEN':
+                  // Username conflict - could suggest alternatives
+                  console.log('Username taken, suggest alternatives');
+                  break;
+                default:
+                  // Generic error handling
+                  console.log('Error code:', data.code);
               }
               break;
           }

@@ -44,7 +44,8 @@ func main() {
 	manager = lobby.NewLobbyManagerWithEvents(&lobby.LobbyEvents{
 		Broadcaster: broadcaster,
 		LobbyStateBuilder: func(l *lobby.Lobby) interface{} {
-			return lobbyStateResponseFromLobby(l, manager)
+			responseBuilder := lobby.NewResponseBuilder(manager)
+			return responseBuilder.BuildLobbyStateResponse(l)
 		},
 	})
 
@@ -60,7 +61,10 @@ func main() {
 	router.Handle("set_ready", lobby.SetReadyHandler(deps))
 	router.Handle("list_lobbies", lobby.ListLobbiesHandler(deps))
 	router.Handle("start_game", lobby.StartGameHandler(deps, validateGameStart))
-	router.Handle("get_lobby_info", lobby.GetLobbyInfoHandler(deps, toLibraryLobbyInfoResponse))
+	router.Handle("get_lobby_info", lobby.GetLobbyInfoHandler(deps, func(l *lobby.Lobby) lobby.LobbyInfoResponse {
+		responseBuilder := lobby.NewResponseBuilder(manager)
+		return responseBuilder.BuildLobbyInfoResponse(l)
+	}))
 	router.Handle("logout", lobby.LogoutHandler(deps))
 
 	// HTTP endpoint for WebSocket
@@ -99,101 +103,6 @@ func main() {
 
 	log.Println("Demo backend started on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
-}
-
-// Local types for response formatting (if still needed)
-type PlayerState struct {
-	UserID       string `json:"user_id"`
-	Username     string `json:"username"`
-	Ready        bool   `json:"ready"`
-	CanStartGame bool   `json:"can_start_game"`
-}
-
-type LobbyStateResponse struct {
-	Action   string                 `json:"action"`
-	LobbyID  string                 `json:"lobby_id"`
-	Players  []PlayerState          `json:"players"`
-	State    string                 `json:"state"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
-}
-
-type LobbyInfoResponse struct {
-	Action     string        `json:"action"`
-	LobbyID    string        `json:"lobby_id"`
-	Name       string        `json:"name"`
-	Players    []PlayerState `json:"players"`
-	State      string        `json:"state"`
-	MaxPlayers int           `json:"max_players"`
-	Public     bool          `json:"public"`
-}
-
-func lobbyStateResponseFromLobby(l *lobby.Lobby, manager *lobby.LobbyManager) LobbyStateResponse {
-	players := make([]PlayerState, 0, len(l.Players))
-	canStartGameFunc := manager.Events.CanStartGame
-	for _, p := range l.Players {
-		canStart := false
-		if canStartGameFunc != nil {
-			canStart = canStartGameFunc(l, string(p.ID))
-		} else {
-			canStart = (l.OwnerID == string(p.ID))
-		}
-		players = append(players, PlayerState{
-			UserID:       string(p.ID),
-			Username:     p.Username,
-			Ready:        p.Ready,
-			CanStartGame: canStart,
-		})
-	}
-	return LobbyStateResponse{
-		Action:   "lobby_state",
-		LobbyID:  string(l.ID),
-		Players:  players,
-		State:    lobbyStateString(l.State),
-		Metadata: l.Metadata,
-	}
-}
-
-func lobbyInfoResponseFromLobby(l *lobby.Lobby) LobbyInfoResponse {
-	players := make([]PlayerState, 0, len(l.Players))
-	for _, p := range l.Players {
-		players = append(players, PlayerState{
-			UserID:   string(p.ID),
-			Username: p.Username,
-			Ready:    p.Ready,
-		})
-	}
-	return LobbyInfoResponse{
-		Action:     "lobby_info",
-		LobbyID:    string(l.ID),
-		Name:       l.Name,
-		Players:    players,
-		State:      lobbyStateString(l.State),
-		MaxPlayers: l.MaxPlayers,
-		Public:     l.Public,
-	}
-}
-
-// Adapter to convert local LobbyInfoResponse to library type
-func toLibraryLobbyInfoResponse(l *lobby.Lobby) lobby.LobbyInfoResponse {
-	resp := lobbyInfoResponseFromLobby(l)
-	players := make([]lobby.PlayerState, len(resp.Players))
-	for i, p := range resp.Players {
-		players[i] = lobby.PlayerState{
-			UserID:       p.UserID,
-			Username:     p.Username,
-			Ready:        p.Ready,
-			CanStartGame: p.CanStartGame,
-		}
-	}
-	return lobby.LobbyInfoResponse{
-		Action:     resp.Action,
-		LobbyID:    resp.LobbyID,
-		Name:       resp.Name,
-		Players:    players,
-		State:      resp.State,
-		MaxPlayers: resp.MaxPlayers,
-		Public:     resp.Public,
-	}
 }
 
 func validateGameStart(l *lobby.Lobby, username string) error {
@@ -237,17 +146,4 @@ func validateGameStart(l *lobby.Lobby, username string) error {
 
 	log.Printf("Game start validation passed for user %s", username)
 	return nil
-}
-
-func lobbyStateString(state lobby.LobbyState) string {
-	switch state {
-	case lobby.LobbyWaiting:
-		return "waiting"
-	case lobby.LobbyInGame:
-		return "in_game"
-	case lobby.LobbyFinished:
-		return "finished"
-	default:
-		return "unknown"
-	}
 }

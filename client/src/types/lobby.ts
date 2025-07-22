@@ -128,7 +128,9 @@ export interface LobbyListResponse {
 
 export interface ErrorResponse {
   action: 'error';
+  code: string;
   message: string;
+  details?: string;
 }
 
 export interface LobbyInfoResponse {
