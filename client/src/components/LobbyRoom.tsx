@@ -36,21 +36,21 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">{lobby.name}</h2>
-          <p className="text-gray-600">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{lobby.name}</h2>
+          <p className="text-gray-600 dark:text-gray-300">
             {lobby.players.length}/{lobby.maxPlayers} Players
           </p>
         </div>
         <div className="text-right">
           <span className={`inline-block px-3 py-1 text-sm rounded-full ${
             lobby.state === 'waiting' 
-              ? 'bg-yellow-100 text-yellow-800' 
+              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200' 
               : lobby.state === 'in_game'
-              ? 'bg-green-100 text-green-800'
-              : 'bg-gray-100 text-gray-800'
+              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+              : 'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200'
           }`}>
             {lobby.state === 'waiting' ? 'Waiting' : 
              lobby.state === 'in_game' ? 'In Game' : 'Finished'}
@@ -60,12 +60,12 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
 
       {/* Players List */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-3">Players</h3>
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">Players</h3>
         <div className="space-y-2">
           {lobby.players.map((player) => (
             <div
               key={player.user_id}
-              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+              className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
             >
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
@@ -73,10 +73,10 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
                     {player.username.charAt(0).toUpperCase()}
                   </span>
                 </div>
-                <span className="font-medium text-gray-800">
+                <span className="font-medium text-gray-800 dark:text-white">
                   {player.username}
                   {player.user_id === currentUserId && (
-                    <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    <span className="ml-2 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 px-2 py-1 rounded">
                       You
                     </span>
                   )}
@@ -85,8 +85,8 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
               <div className="flex items-center space-x-2">
                 <span className={`inline-block px-2 py-1 text-xs rounded ${
                   player.ready 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-gray-100 text-gray-600'
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200' 
+                    : 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
                 }`}>
                   {player.ready ? 'Ready' : 'Not Ready'}
                 </span>
@@ -98,11 +98,11 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
 
       {/* Ready Status */}
       {currentPlayer && (
-        <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Your Status:</p>
-              <p className="font-medium text-gray-800">
+              <p className="text-sm text-gray-600 dark:text-gray-300">Your Status:</p>
+              <p className="font-medium text-gray-800 dark:text-white">
                 {currentPlayer.ready ? 'Ready to play!' : 'Not ready'}
               </p>
             </div>
@@ -122,9 +122,9 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
 
       {/* Game Start Status */}
       {allReady && lobby.players.length >= 2 && lobby.state === 'waiting' && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+        <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
           <div className="flex items-center justify-center">
-            <span className="text-green-800 font-medium">
+            <span className="text-green-800 dark:text-green-200 font-medium">
               🎮 All players are ready! Game can start.
             </span>
           </div>
@@ -133,9 +133,9 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
 
       {/* Game In Progress Status */}
       {lobby.state === 'in_game' && (
-        <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+        <div className="mb-6 p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
           <div className="flex items-center justify-center">
-            <span className="text-purple-800 font-medium">
+            <span className="text-purple-800 dark:text-purple-200 font-medium">
               🎮 Game is in progress!
             </span>
           </div>
