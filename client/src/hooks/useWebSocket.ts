@@ -267,6 +267,8 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
               setError(null);
               // Store username for auto-reconnect
               localStorage.setItem('lobby_username', data.username);
+              // Update the ref immediately for use in subsequent messages
+              currentUserIdRef.current = data.user_id;
               break;
             case 'lobby_left':
               // Reset leaving flag since we got a response
@@ -282,13 +284,24 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
               // Reset leaving flag since we got a response
               setIsLeavingLobby(false);
               // Debug log for userId and players
-              console.log('DEBUG: userId:', userId, 'players:', (data as any).players);
-              // Check if the current player is still in the lobby
-              const currentPlayerInLobby = (data as any).players && (data as any).players.some((p: any) => p.user_id === currentUserIdRef.current);
+              console.log('DEBUG: userId:', userId, 'currentUserIdRef:', currentUserIdRef.current, 'username:', username, 'players:', (data as any).players);
+              
+              // Check if the current player is in the lobby
+              // Use both userId and currentUserIdRef for robustness during reconnection
+              const currentPlayerInLobby = (data as any).players && (data as any).players.some((p: any) => {
+                const match = p.user_id === currentUserIdRef.current || p.user_id === userId || p.username === username;
+                console.log('DEBUG: Checking player:', p, 'match:', match);
+                return match;
+              });
+              
+              console.log('DEBUG: currentPlayerInLobby:', currentPlayerInLobby);
+              
               if (!currentPlayerInLobby) {
                 // Player is no longer in the lobby, clear current lobby state
+                console.log('DEBUG: Player not found in lobby, clearing current lobby');
                 setCurrentLobby(null);
               } else {
+                console.log('DEBUG: Player found in lobby, setting current lobby');
                 setCurrentLobby({
                   id: data.lobby_id,
                   name: data.lobby_id, // Using lobby_id as name for now

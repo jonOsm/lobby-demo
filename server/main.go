@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 	lobby "github.com/jonosm/multiplayer-lobby"
@@ -47,10 +48,28 @@ func main() {
 			responseBuilder := lobby.NewResponseBuilder(manager)
 			return responseBuilder.BuildLobbyStateResponse(l)
 		},
+		OnLobbyDeleted: func(l *lobby.Lobby) {
+			// Clear lobby membership for all players when lobby is deleted
+			for _, player := range l.Players {
+				sessionManager.ClearLobbyID(string(player.ID))
+			}
+		},
 	})
 
 	// Update deps with the manager
 	deps.LobbyManager = manager
+
+	// Start periodic cleanup of stale sessions (less frequent since we handle reconnection immediately)
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				sessionManager.CleanupStaleSessions(10 * time.Minute)
+			}
+		}
+	}()
 
 	// Message router setup
 	router := lobby.NewMessageRouter()
@@ -76,9 +95,59 @@ func main() {
 			return
 		}
 		wsConn := &WebSocketConn{conn: conn}
-		defer func() {
+
+		// Set up close handler to ensure session cleanup
+		conn.SetCloseHandler(func(code int, text string) error {
+			log.Printf("WebSocket close handler called for connection from %s", r.RemoteAddr)
 			if userID, exists := deps.ConnToUserID[wsConn]; exists {
-				sessionManager.RemoveSession(userID)
+				log.Printf("Removing session for user %s due to WebSocket close", userID)
+				sessionManager.ForceRemoveSession(userID)
+			}
+			delete(deps.ConnToUserID, wsConn)
+			return nil
+		})
+
+		// Set up ping handler to detect disconnections
+		conn.SetPingHandler(func(appData string) error {
+			log.Printf("Ping received from %s", r.RemoteAddr)
+			return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(time.Second))
+		})
+
+		// Set up pong handler
+		conn.SetPongHandler(func(string) error {
+			log.Printf("Pong received from %s", r.RemoteAddr)
+			return conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		})
+
+		// Set initial read deadline
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+
+		// Start a goroutine to send periodic pings and detect disconnections
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(time.Second)); err != nil {
+						log.Printf("Failed to send ping to %s: %v", r.RemoteAddr, err)
+						// Connection is broken, clean up session
+						if userID, exists := deps.ConnToUserID[wsConn]; exists {
+							log.Printf("Cleaning up session for user %s due to ping failure", userID)
+							sessionManager.ForceRemoveSession(userID)
+							delete(deps.ConnToUserID, wsConn)
+						}
+						return
+					}
+				}
+			}
+		}()
+
+		defer func() {
+			log.Printf("WebSocket defer cleanup for connection from %s", r.RemoteAddr)
+			if userID, exists := deps.ConnToUserID[wsConn]; exists {
+				log.Printf("Removing session for user %s due to defer cleanup", userID)
+				sessionManager.ForceRemoveSession(userID)
 			}
 			delete(deps.ConnToUserID, wsConn)
 			conn.Close()
