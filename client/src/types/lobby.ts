@@ -3,6 +3,7 @@ export interface Player {
   user_id: string;
   username: string;
   ready: boolean;
+  can_start_game?: boolean;
 }
 
 export interface Lobby {

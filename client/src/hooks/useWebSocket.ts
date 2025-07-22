@@ -20,7 +20,6 @@ export interface UseWebSocketReturn {
   startGame: (lobbyId: string) => void;
   getLobbyInfo: (lobbyId: string) => void;
   listLobbies: () => void;
-  setUsername: (username: string) => void;
   logout: () => void;
 }
 
@@ -386,7 +385,6 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     startGame,
     getLobbyInfo,
     listLobbies,
-    setUsername,
     logout,
   };
 } 

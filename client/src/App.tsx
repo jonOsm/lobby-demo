@@ -4,7 +4,6 @@ import { LobbyList } from './components/LobbyList';
 import { CreateLobby } from './components/CreateLobby';
 import { LobbyRoom } from './components/LobbyRoom';
 import { DebugPanel } from './components/DebugPanel';
-import './App.css';
 
 function App() {
   const {
@@ -24,7 +23,6 @@ function App() {
     startGame,
     getLobbyInfo,
     listLobbies,
-    setUsername,
     isLeavingLobby,
     logout,
   } = useWebSocket();
