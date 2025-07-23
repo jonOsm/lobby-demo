@@ -163,7 +163,7 @@ func main() {
 	})
 
 	log.Println("Demo backend started on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe("localhost:8080", nil))
 }
 
 func validateGameStart(l *lobby.Lobby, username string) error {
