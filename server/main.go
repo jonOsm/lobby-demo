@@ -74,7 +74,9 @@ func main() {
 	// Message router setup - simplified with automatic handler registration
 	router := lobby.NewMessageRouter()
 	router.SetupDefaultHandlersWithCustom(deps, &lobby.HandlerOptions{
-		GameStartValidator: validateGameStart,
+		// TODO: Use configurable validation once library is updated
+		// GameStartConfig: lobby.DefaultGameStartConfig,
+		GameStartValidator: validateGameStart, // Temporary until library update
 		ResponseBuilder:    lobby.NewResponseBuilder(manager),
 	})
 
@@ -88,12 +90,12 @@ func main() {
 		}
 		wsConn := &WebSocketConn{conn: conn}
 
-		// Set up close handler to ensure session cleanup
+		// Set up close handler to handle connection loss gracefully
 		conn.SetCloseHandler(func(code int, text string) error {
 			log.Printf("WebSocket close handler called for connection from %s", r.RemoteAddr)
 			if userID, exists := deps.ConnToUserID[wsConn]; exists {
-				log.Printf("Removing session for user %s due to WebSocket close", userID)
-				sessionManager.ForceRemoveSession(userID)
+				log.Printf("Connection lost for user %s, but keeping session active for reconnection", userID)
+				// Don't immediately remove session - allow reconnection
 			}
 			delete(deps.ConnToUserID, wsConn)
 			return nil
@@ -123,10 +125,9 @@ func main() {
 				case <-ticker.C:
 					if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(time.Second)); err != nil {
 						log.Printf("Failed to send ping to %s: %v", r.RemoteAddr, err)
-						// Connection is broken, clean up session
+						// Connection is broken, but keep session for reconnection
 						if userID, exists := deps.ConnToUserID[wsConn]; exists {
-							log.Printf("Cleaning up session for user %s due to ping failure", userID)
-							sessionManager.ForceRemoveSession(userID)
+							log.Printf("Ping failed for user %s, but keeping session active for reconnection", userID)
 							delete(deps.ConnToUserID, wsConn)
 						}
 						return
@@ -138,8 +139,7 @@ func main() {
 		defer func() {
 			log.Printf("WebSocket defer cleanup for connection from %s", r.RemoteAddr)
 			if userID, exists := deps.ConnToUserID[wsConn]; exists {
-				log.Printf("Removing session for user %s due to defer cleanup", userID)
-				sessionManager.ForceRemoveSession(userID)
+				log.Printf("Connection cleanup for user %s, but keeping session active for reconnection", userID)
 			}
 			delete(deps.ConnToUserID, wsConn)
 			conn.Close()
@@ -166,6 +166,8 @@ func main() {
 	log.Fatal(http.ListenAndServe("localhost:8080", nil))
 }
 
+// validateGameStart validates game start conditions
+// TODO: Replace with configurable validation from library once updated
 func validateGameStart(l *lobby.Lobby, username string) error {
 	log.Printf("Validating game start for user %s in lobby %s", username, l.ID)
 
