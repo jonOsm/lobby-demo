@@ -1,2 +1,4 @@
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+github.com/jonosm/multiplayer-lobby v0.0.0-20250723055613-cb2bc1ae8ab0 h1:KrLOqlH7GfA4OmWoW9oSk74PY2oY5ncJhbRn45fJAuQ=
+github.com/jonosm/multiplayer-lobby v0.0.0-20250723055613-cb2bc1ae8ab0/go.mod h1:obNJ1jo78qJclvmEEpGusqshmRy0xnj+1szzw0PDO4E=

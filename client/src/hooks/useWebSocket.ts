@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { toast } from 'react-toastify';
 import type { WebSocketMessage, WebSocketResponse, Lobby, Player } from '../types/lobby';
 
 export interface UseWebSocketReturn {
@@ -256,7 +255,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
 
         if (isSessionEvent(data)) {
           if (data.event === 'session_created') {
-            toast.success(`Welcome, ${data.username}!`);
+            console.log(`🎉 Welcome, ${data.username}!`);
             console.log(`🎉 Session created for ${data.username}`);
             setUserId(data.user_id);
             setUsername(data.username);
@@ -265,7 +264,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
             localStorage.setItem('lobby_username', data.username);
           }
           if (data.event === 'session_reconnected') {
-            toast.success(`Reconnected as ${data.username}`);
+            console.log(`🔄 Reconnected as ${data.username}`);
             console.log(`🔄 Reconnected as ${data.username}`);
             setUserId(data.user_id);
             setUsername(data.username);
@@ -275,7 +274,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
           if (data.event === 'session_removed') {
             console.log('SESSION_REMOVED EVENT HANDLER FIRED');
             console.trace('session_removed stack trace');
-            toast.error('You have been logged out.');
+            console.log('🚪 You have been logged out.');
             console.log('🚪 Session removed, logging out.');
             setUserId(null);
             setUsername('');
