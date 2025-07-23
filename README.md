@@ -1,4 +1,4 @@
-# Multiplayer Lobby Demo
+# Ready Up - Multiplayer Lobby Demo
 
 A real-time multiplayer lobby system with a React frontend and Go backend.
 
