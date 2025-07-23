@@ -32,12 +32,12 @@ function App() {
     logout,
   } = useWebSocket();
 
-  // Load lobbies on connection
+  // Load lobbies on connection and registration
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected && isRegistered) {
       listLobbies();
     }
-  }, [isConnected, listLobbies]);
+  }, [isConnected, isRegistered, listLobbies]);
 
   // Save dark mode preference
   useEffect(() => {

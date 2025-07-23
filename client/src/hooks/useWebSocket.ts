@@ -30,17 +30,23 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
   const [lobbyInfo, setLobbyInfo] = useState<Lobby | null>(null);
   const [username, setUsername] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLeavingLobby, setIsLeavingLobby] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
   
-  // Use ref to store current user ID for immediate access
+  // Use ref to store current user ID and token for immediate access
   const currentUserIdRef = useRef<string | null>(null);
+  const currentTokenRef = useRef<string | null>(null);
   
-  // Update ref when userId changes
+  // Update refs when userId or token changes
   useEffect(() => {
     currentUserIdRef.current = userId;
   }, [userId]);
+  
+  useEffect(() => {
+    currentTokenRef.current = sessionToken;
+  }, [sessionToken]);
   
   // Clear error after 5 seconds
   useEffect(() => {
@@ -64,9 +70,15 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
   }, []);
 
   const registerUser = useCallback((username: string) => {
+    // Check if we have a stored token for this username
+    const storedToken = localStorage.getItem(`lobby_token_${username}`);
+    
     sendMessage({
       action: 'register_user',
-      data: { username },
+      data: { 
+        username,
+        token: storedToken || undefined, // Include token if available for reconnection
+      },
     });
   }, [sendMessage]);
 
@@ -83,8 +95,8 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
 
   const createLobby = useCallback((name: string, maxPlayers: number, isPublic: boolean) => {
     console.log('🔍 createLobby called with:', { name, maxPlayers, isPublic, userId, isRegistered });
-    if (!userId) {
-      console.log('❌ No user ID available');
+    if (!userId || !sessionToken) {
+      console.log('❌ No user ID or token available');
       setError('User not registered');
       return;
     }
@@ -96,12 +108,13 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
         max_players: maxPlayers,
         public: isPublic,
         user_id: userId,
+        token: sessionToken,
       },
     });
-  }, [sendMessage, userId]);
+  }, [sendMessage, userId, sessionToken]);
 
   const joinLobby = useCallback((lobbyId: string) => {
-    if (!userId) {
+    if (!userId || !sessionToken) {
       setError('User not registered');
       return;
     }
@@ -110,12 +123,13 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
       data: {
         lobby_id: lobbyId,
         user_id: userId,
+        token: sessionToken,
       },
     });
-  }, [sendMessage, userId]);
+  }, [sendMessage, userId, sessionToken]);
 
   const leaveLobby = useCallback((lobbyId: string) => {
-    if (!userId) {
+    if (!userId || !sessionToken) {
       setError('User not registered');
       return;
     }
@@ -130,12 +144,13 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
       data: {
         lobby_id: lobbyId,
         user_id: userId,
+        token: sessionToken,
       },
     });
-  }, [sendMessage, userId, isLeavingLobby]);
+  }, [sendMessage, userId, sessionToken, isLeavingLobby]);
 
   const setReady = useCallback((lobbyId: string, ready: boolean) => {
-    if (!userId) {
+    if (!userId || !sessionToken) {
       setError('User not registered');
       return;
     }
@@ -144,13 +159,14 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
       data: {
         lobby_id: lobbyId,
         user_id: userId,
+        token: sessionToken,
         ready,
       },
     });
-  }, [sendMessage, userId]);
+  }, [sendMessage, userId, sessionToken]);
 
   const startGame = useCallback((lobbyId: string) => {
-    if (!userId) {
+    if (!userId || !sessionToken) {
       setError('User not registered');
       return;
     }
@@ -159,25 +175,37 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
       data: {
         lobby_id: lobbyId,
         user_id: userId,
+        token: sessionToken,
       },
     });
-  }, [sendMessage, userId]);
+  }, [sendMessage, userId, sessionToken]);
 
   const getLobbyInfo = useCallback((lobbyId: string) => {
+    if (!sessionToken) {
+      setError('User not registered');
+      return;
+    }
     sendMessage({
       action: 'get_lobby_info',
       data: {
         lobby_id: lobbyId,
+        token: sessionToken,
       },
     });
-  }, [sendMessage]);
+  }, [sendMessage, sessionToken]);
 
   const listLobbies = useCallback(() => {
+    if (!sessionToken) {
+      setError('User not registered');
+      return;
+    }
     sendMessage({ 
       action: 'list_lobbies',
-      data: {},
+      data: {
+        token: sessionToken,
+      },
     });
-  }, [sendMessage]);
+  }, [sendMessage, sessionToken]);
 
   const logout = useCallback(() => {
     if (!userId) return;
@@ -187,12 +215,18 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     });
     setUserId(null);
     setUsername('');
+    setSessionToken(null);
     setIsRegistered(false);
     setCurrentLobby(null);
     setLobbyInfo(null);
+    setLobbies([]);
+    setError(null);
+    // Clear stored credentials
     localStorage.removeItem('lobby_username');
-    // Do NOT show toast here; only show it in the session_removed event handler.
-  }, [sendMessage, userId]);
+    if (username) {
+      localStorage.removeItem(`lobby_token_${username}`);
+    }
+  }, [sendMessage, userId, username]);
 
   useEffect(() => {
     console.log('Connecting to WebSocket...');
@@ -245,7 +279,13 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
             console.log('🚪 Session removed, logging out.');
             setUserId(null);
             setUsername('');
+            setSessionToken(null);
             setIsRegistered(false);
+            // Clear stored credentials
+            localStorage.removeItem('lobby_username');
+            if (username) {
+              localStorage.removeItem(`lobby_token_${username}`);
+            }
             // Do NOT setError here to avoid duplicate error bubble
             // TODO: redirectToLogin();
           }
@@ -263,12 +303,15 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
               console.log('🎉 User registered successfully:', { userId: data.user_id, username: data.username });
               setUserId(data.user_id);
               setUsername(data.username);
+              setSessionToken(data.token); // Store the session token
               setIsRegistered(true);
               setError(null);
-              // Store username for auto-reconnect
+              // Store username and token for auto-reconnect
               localStorage.setItem('lobby_username', data.username);
+              localStorage.setItem(`lobby_token_${data.username}`, data.token);
               // Update the ref immediately for use in subsequent messages
               currentUserIdRef.current = data.user_id;
+              currentTokenRef.current = data.token;
               break;
             case 'lobby_left':
               // Reset leaving flag since we got a response
@@ -277,8 +320,10 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
               console.log('🚪 Successfully left lobby:', data.lobby_id);
               setCurrentLobby(null);
               setError(null);
-              // Refresh lobby list
-              listLobbies();
+              // Refresh lobby list only if we have a valid session
+              if (sessionToken) {
+                listLobbies();
+              }
               break;
             case 'lobby_state':
               // Reset leaving flag since we got a response
@@ -348,8 +393,22 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
               switch (data.code) {
                 case 'USER_NOT_FOUND':
                 case 'USER_INACTIVE':
-                  // User session issues - could trigger re-registration
+                case 'INVALID_TOKEN':
+                case 'UNAUTHORIZED':
+                  // User session issues - clear session and allow re-registration
                   console.log('User session issue:', data.code);
+                  setUserId(null);
+                  setUsername('');
+                  setSessionToken(null);
+                  setIsRegistered(false);
+                  setCurrentLobby(null);
+                  setLobbyInfo(null);
+                  setLobbies([]);
+                  // Clear stored credentials
+                  localStorage.removeItem('lobby_username');
+                  if (username) {
+                    localStorage.removeItem(`lobby_token_${username}`);
+                  }
                   break;
                 case 'LOBBY_NOT_FOUND':
                 case 'PLAYER_NOT_IN_LOBBY':

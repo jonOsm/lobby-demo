@@ -18,6 +18,7 @@ export interface Lobby {
 // Request payload types (without action field)
 export interface RegisterUserPayload {
   username: string;
+  token?: string; // Optional token for reconnection
 }
 
 export interface CreateLobbyPayload {
@@ -25,36 +26,42 @@ export interface CreateLobbyPayload {
   max_players: number;
   public: boolean;
   user_id: string;
+  token: string; // Session token for authentication
   metadata?: Record<string, any>;
 }
 
 export interface JoinLobbyPayload {
   lobby_id: string;
   user_id: string;
+  token: string; // Session token for authentication
 }
 
 export interface LeaveLobbyPayload {
   lobby_id: string;
   user_id: string;
+  token: string; // Session token for authentication
 }
 
 export interface SetReadyPayload {
   lobby_id: string;
   user_id: string;
+  token: string; // Session token for authentication
   ready: boolean;
 }
 
 export interface ListLobbiesPayload {
-  // Empty payload
+  token: string; // Session token for authentication
 }
 
 export interface StartGamePayload {
   lobby_id: string;
   user_id: string;
+  token: string; // Session token for authentication
 }
 
 export interface GetLobbyInfoPayload {
   lobby_id: string;
+  token: string; // Session token for authentication
 }
 
 export interface LogoutPayload {
@@ -112,6 +119,7 @@ export interface RegisterUserResponse {
   action: 'user_registered';
   user_id: string;
   username: string;
+  token: string; // Session token for future authentication
 }
 
 export interface LobbyStateResponse {
