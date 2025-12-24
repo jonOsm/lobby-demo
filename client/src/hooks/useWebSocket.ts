@@ -47,6 +47,9 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     currentTokenRef.current = sessionToken;
   }, [sessionToken]);
 
+  // Ref for listLobbies to avoid stale closure in onmessage handler
+  const listLobbiesRef = useRef<() => void>(() => { });
+
   // Clear error after 5 seconds
   useEffect(() => {
     if (error) {
@@ -206,6 +209,11 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     });
   }, [sendMessage, sessionToken]);
 
+  // Keep listLobbiesRef updated
+  useEffect(() => {
+    listLobbiesRef.current = listLobbies;
+  }, [listLobbies]);
+
   const logout = useCallback(() => {
     if (!userId) return;
     sendMessage({
@@ -342,6 +350,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
 
               if (!currentPlayerInLobby) {
                 // Player is no longer in the lobby, clear current lobby state
+                // Don't clear error - there might be an important message like "host left"
                 console.log('DEBUG: Player not found in lobby, clearing current lobby');
                 setCurrentLobby(null);
               } else {
@@ -362,8 +371,8 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
                   state: data.state,
                   metadata: data.metadata,
                 });
+                setError(null);
               }
-              setError(null);
               break;
             case 'lobby_info':
               setLobbyInfo({
@@ -379,6 +388,15 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
             case 'lobby_list':
               setLobbies(data.lobbies);
               setError(null);
+              break;
+            case 'lobby_closed':
+              // Host left the lobby - close it and return to lobby list
+              console.log('🔒 Lobby closed:', data.message);
+              setCurrentLobby(null);
+              setError(data.message || 'The host has left the lobby');
+              if (currentTokenRef.current) {
+                listLobbiesRef.current();
+              }
               break;
             case 'error':
               // Reset leaving flag since we got a response

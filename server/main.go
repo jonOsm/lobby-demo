@@ -48,6 +48,25 @@ func main() {
 			responseBuilder := lobby.NewResponseBuilder(manager)
 			return responseBuilder.BuildLobbyStateResponse(l)
 		},
+		OnPlayerLeave: func(l *lobby.Lobby, player *lobby.Player) {
+			// Check if the leaving player is the owner (host)
+			if string(player.ID) == l.OwnerID {
+				log.Printf("Host %s left lobby %s, closing lobby for remaining players", player.Username, l.ID)
+				// Broadcast lobby_closed event to all remaining players
+				manager.BroadcastToLobby(l, map[string]interface{}{
+					"action":  "lobby_closed",
+					"reason":  "host_left",
+					"message": "The host has left the lobby",
+				})
+				// Clear lobby ID for remaining players
+				for _, p := range l.Players {
+					sessionManager.ClearLobbyID(string(p.ID))
+				}
+				// Clear remaining players to prevent library from broadcasting lobby_state
+				// This also causes the lobby to be deleted since it will be empty
+				l.Players = nil
+			}
+		},
 		OnLobbyDeleted: func(l *lobby.Lobby) {
 			// Clear lobby membership for all players when lobby is deleted
 			for _, player := range l.Players {

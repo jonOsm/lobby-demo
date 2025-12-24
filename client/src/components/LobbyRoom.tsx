@@ -45,15 +45,14 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
           </p>
         </div>
         <div className="text-right">
-          <span className={`inline-block px-3 py-1 text-sm rounded-full ${
-            lobby.state === 'waiting' 
-              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200' 
-              : lobby.state === 'in_game'
+          <span className={`inline-block px-3 py-1 text-sm rounded-full ${lobby.state === 'waiting'
+            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200'
+            : lobby.state === 'in_game'
               ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
               : 'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200'
-          }`}>
-            {lobby.state === 'waiting' ? 'Waiting' : 
-             lobby.state === 'in_game' ? 'In Game' : 'Finished'}
+            }`}>
+            {lobby.state === 'waiting' ? 'Waiting' :
+              lobby.state === 'in_game' ? 'In Game' : 'Finished'}
           </span>
         </div>
       </div>
@@ -83,11 +82,10 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
                 </span>
               </div>
               <div className="flex items-center space-x-2">
-                <span className={`inline-block px-2 py-1 text-xs rounded ${
-                  player.ready 
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200' 
-                    : 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
-                }`}>
+                <span className={`inline-block px-2 py-1 text-xs rounded ${player.ready
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                  : 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
+                  }`}>
                   {player.ready ? 'Ready' : 'Not Ready'}
                 </span>
               </div>
@@ -96,8 +94,8 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
         </div>
       </div>
 
-      {/* Ready Status */}
-      {currentPlayer && (
+      {/* Ready Status - only show when waiting */}
+      {currentPlayer && lobby.state === 'waiting' && (
         <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
@@ -108,11 +106,10 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
             </div>
             <button
               onClick={handleReadyToggle}
-              className={`px-4 py-2 rounded font-medium ${
-                currentPlayer.ready
-                  ? 'bg-red-500 text-white hover:bg-red-600'
-                  : 'bg-green-500 text-white hover:bg-green-600'
-              }`}
+              className={`px-4 py-2 rounded font-medium ${currentPlayer.ready
+                ? 'bg-red-500 text-white hover:bg-red-600'
+                : 'bg-green-500 text-white hover:bg-green-600'
+                }`}
             >
               {currentPlayer.ready ? 'Not Ready' : 'Ready'}
             </button>
@@ -134,9 +131,12 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
       {/* Game In Progress Status */}
       {lobby.state === 'in_game' && (
         <div className="mb-6 p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
-          <div className="flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center space-y-2">
             <span className="text-purple-800 dark:text-purple-200 font-medium">
               🎮 Game is in progress!
+            </span>
+            <span className="text-sm text-purple-600 dark:text-purple-300">
+              This is a multiplayer lobby demo — no actual game is implemented.
             </span>
           </div>
         </div>
@@ -147,17 +147,16 @@ export const LobbyRoom: React.FC<LobbyRoomProps> = ({
         <button
           onClick={handleLeave}
           disabled={isLeavingLobby}
-          className={`px-4 py-2 rounded ${
-            isLeavingLobby
-              ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-              : 'bg-red-500 text-white hover:bg-red-600'
-          }`}
+          className={`px-4 py-2 rounded ${isLeavingLobby
+            ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+            : 'bg-red-500 text-white hover:bg-red-600'
+            }`}
         >
           {isLeavingLobby ? 'Leaving...' : 'Leave Lobby'}
         </button>
-        
+
         {allReady && lobby.players.length >= 2 && lobby.state === 'waiting' && currentPlayer?.can_start_game && (
-          <button 
+          <button
             onClick={handleStartGame}
             className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
           >

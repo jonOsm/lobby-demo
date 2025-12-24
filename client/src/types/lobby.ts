@@ -158,6 +158,12 @@ export interface LobbyLeftResponse {
   user_id: string;
 }
 
+export interface LobbyClosedResponse {
+  action: 'lobby_closed';
+  reason: string;
+  message: string;
+}
+
 export interface SessionCreatedEvent {
   event: 'session_created';
   user_id: string;
@@ -193,7 +199,8 @@ export type WebSocketResponse =
   | LobbyListResponse
   | LobbyInfoResponse
   | LobbyLeftResponse
+  | LobbyClosedResponse
   | ErrorResponse
   | SessionCreatedEvent
   | SessionReconnectedEvent
-  | SessionRemovedEvent; 
+  | SessionRemovedEvent;
