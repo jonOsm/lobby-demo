@@ -33,20 +33,20 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
   const [error, setError] = useState<string | null>(null);
   const [isLeavingLobby, setIsLeavingLobby] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
-  
+
   // Use ref to store current user ID and token for immediate access
   const currentUserIdRef = useRef<string | null>(null);
   const currentTokenRef = useRef<string | null>(null);
-  
+
   // Update refs when userId or token changes
   useEffect(() => {
     currentUserIdRef.current = userId;
   }, [userId]);
-  
+
   useEffect(() => {
     currentTokenRef.current = sessionToken;
   }, [sessionToken]);
-  
+
   // Clear error after 5 seconds
   useEffect(() => {
     if (error) {
@@ -56,7 +56,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
       return () => clearTimeout(timer);
     }
   }, [error]);
-  
+
   const wsRef = useRef<WebSocket | null>(null);
 
   const sendMessage = useCallback((message: WebSocketMessage) => {
@@ -71,10 +71,10 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
   const registerUser = useCallback((username: string) => {
     // Check if we have a stored token for this username
     const storedToken = localStorage.getItem(`lobby_token_${username}`);
-    
+
     sendMessage({
       action: 'register_user',
-      data: { 
+      data: {
         username,
         token: storedToken || undefined, // Include token if available for reconnection
       },
@@ -136,7 +136,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
     if (isLeavingLobby) {
       return;
     }
-    
+
     setIsLeavingLobby(true);
     sendMessage({
       action: 'leave_lobby',
@@ -198,7 +198,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
       setError('User not registered');
       return;
     }
-    sendMessage({ 
+    sendMessage({
       action: 'list_lobbies',
       data: {
         token: sessionToken,
@@ -208,8 +208,8 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
 
   const logout = useCallback(() => {
     if (!userId) return;
-    sendMessage({ 
-      action: 'logout', 
+    sendMessage({
+      action: 'logout',
       data: { user_id: userId },
     });
     setUserId(null);
@@ -312,7 +312,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
               currentUserIdRef.current = data.user_id;
               currentTokenRef.current = data.token;
               break;
-            case 'lobby_left':
+            case 'left_lobby':
               // Reset leaving flag since we got a response
               setIsLeavingLobby(false);
               // Clear current lobby state to return to lobby list
@@ -329,7 +329,7 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
               setIsLeavingLobby(false);
               // Debug log for userId and players
               console.log('DEBUG: userId:', userId, 'currentUserIdRef:', currentUserIdRef.current, 'username:', username, 'players:', (data as any).players);
-              
+
               // Check if the current player is in the lobby
               // Use both userId and currentUserIdRef for robustness during reconnection
               const currentPlayerInLobby = (data as any).players && (data as any).players.some((p: any) => {
@@ -337,9 +337,9 @@ export function useWebSocket(url: string = 'ws://localhost:8080/ws'): UseWebSock
                 console.log('DEBUG: Checking player:', p, 'match:', match);
                 return match;
               });
-              
+
               console.log('DEBUG: currentPlayerInLobby:', currentPlayerInLobby);
-              
+
               if (!currentPlayerInLobby) {
                 // Player is no longer in the lobby, clear current lobby state
                 console.log('DEBUG: Player not found in lobby, clearing current lobby');

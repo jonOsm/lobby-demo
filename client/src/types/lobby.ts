@@ -153,7 +153,7 @@ export interface LobbyInfoResponse {
 }
 
 export interface LobbyLeftResponse {
-  action: 'lobby_left';
+  action: 'left_lobby';
   lobby_id: string;
   user_id: string;
 }
@@ -176,7 +176,7 @@ export interface SessionRemovedEvent {
   username: string;
 }
 
-export type WebSocketMessage = 
+export type WebSocketMessage =
   | RegisterUserRequest
   | CreateLobbyRequest
   | JoinLobbyRequest
@@ -187,7 +187,7 @@ export type WebSocketMessage =
   | GetLobbyInfoRequest
   | LogoutRequest;
 
-export type WebSocketResponse = 
+export type WebSocketResponse =
   | RegisterUserResponse
   | LobbyStateResponse
   | LobbyListResponse
